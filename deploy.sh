@@ -1,17 +1,26 @@
 #!/bin/sh
 # deploy - push selected files to github
 
+echo "<------- START CHECKING ENVIRONMENT ------->"
+if [ -z "${GITHUB_TOKEN}" ]; then
+    echo "Missing GITHUB_TOKEN environment variable"
+    echo "<------- FAILED CHECKING ENVIRONMENT ------->"
+    exit 1
+fi
+
 deploy_directory="client-go"
 github_account_name="Kameleoon"
-
+email_sdk="sdk@kameleoon.com"
+github_repo_url="https://${GITHUB_TOKEN}@github.com/${github_account_name}/${deploy_directory}.git"
+echo "<------- SUCCESS CHECKING ENVIRONMENT ------->"
 
 echo "Prepare for deployment"
 # Init github repository inside deploy folder
 rm -rf "${deploy_directory}"
 
 # Clone git and get version
-git config --global user.email "ggrandjean@kameleoon.com"
-git clone "git@github.com:${github_account_name}/${deploy_directory}.git"
+git config --global user.email "${email_sdk}"
+git clone "${github_repo_url}"
 cd ${deploy_directory}
 version=$(echo $(git describe --tags) | awk -F. -v OFS=. '{$NF++;print}')
 while [ "$1" != "" ]; do
@@ -38,7 +47,7 @@ echo "Deploying version ${version}"
 
 # Commit and push new files
 git add *
-git commit -m "Version ${version}"
+git commit -m "GO SDK ${version}"
 git push --force
 
 # Create tag and push

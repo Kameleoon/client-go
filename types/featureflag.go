@@ -10,8 +10,8 @@ type FeatureFlag struct {
 	ExpositionRate     float64         `json:"expositionRate"`
 	TargetingSegmentID int             `json:"targetingSegmentId"`
 	TargetingSegment   interface{}     `json:"targetingSegment,omitempty"`
-	VariationsID       []int           `json:"variationsId,omitempty"`
-	Variations         []Variation     `json:"variations,omitempty"`
+	VariationsID       []int           `json:"variations,omitempty"`
+	Variations         []Variation     `json:"-"`
 	Goals              []int           `json:"goals"`
 	SDKLanguageType    SDKLanguageType `json:"sdkLanguageType"`
 	Status             string          `json:"status"`

@@ -408,7 +408,12 @@ func (c *Client) GetFeatureVariable(featureKey interface{}, variableKey string) 
 	var customJson interface{}
 	for _, v := range ff.Variations {
 		cj := make(map[string]interface{})
-		if err = json.Unmarshal(v.CustomJson, &cj); err != nil {
+
+		stringData := string(v.CustomJson[:])
+		stringData = strings.ReplaceAll(stringData, "\\", "")
+		stringData = stringData[1 : len(stringData)-1]
+
+		if err = json.Unmarshal([]byte(stringData), &cj); err != nil {
 			continue
 		}
 		if val, exist := cj[variableKey]; exist {

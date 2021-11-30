@@ -33,7 +33,7 @@ type Experiment struct {
 	Deviations             Deviations                 `json:"deviations"`
 	RespoolTime            RespoolTime                `json:"respoolTime"`
 	TargetingConfiguration TargetingConfigurationType `json:"targetingConfiguration"`
-	VariationsID           []int                      `json:"variationsId,omitempty"`
+	VariationsID           []int                      `json:"variations,omitempty"`
 	Variations             []Variation                `json:"-"`
 	DateModified           TimeNoTZ                   `json:"dateModified"`
 	DateStarted            TimeNoTZ                   `json:"dateStarted"`
