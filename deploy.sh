@@ -51,8 +51,8 @@ git commit -m "GO SDK ${version}"
 git push --force
 
 # Create tag and push
-git tag "${version}" main
-git push origin "${version}"
+git tag "v${version}" main
+git push origin "v${version}"
 
 # Remove deploy folder
 cd ../

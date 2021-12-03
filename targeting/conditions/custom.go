@@ -5,9 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/segmentio/encoding/json"
-
 	"github.com/Kameleoon/client-go/types"
+	"github.com/segmentio/encoding/json"
 )
 
 func NewCustomDatum(c types.TargetingCondition) *CustomDatum {

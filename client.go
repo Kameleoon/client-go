@@ -2,6 +2,7 @@ package kameleoon
 
 import (
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,7 +17,7 @@ import (
 	"github.com/Kameleoon/client-go/utils"
 )
 
-const sdkVersion = "1.0.0"
+const sdkVersion = "1.0.2"
 
 const (
 	API_URL     = "https://api.kameleoon.com"
@@ -121,7 +122,15 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 		}
 
 		threshold := getHashDouble(ex.ID, visitorCode, ex.RespoolTime)
-		for k, v := range ex.Deviations {
+		keys := make([]int, 0, len(ex.Deviations))
+		for k := range ex.Deviations {
+			keyInt, _ := strconv.Atoi(k)
+			keys = append(keys, keyInt)
+		}
+		sort.Ints(keys)
+		for _, kInt := range keys {
+			k := strconv.Itoa(kInt)
+			v := ex.Deviations[k]
 			threshold -= v
 			if threshold >= 0 {
 				continue
