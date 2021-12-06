@@ -26,28 +26,30 @@ type ConditionsFirstLevel struct {
 }
 
 const (
-	targetingConditionStaticFieldId       = "id"
-	targetingConditionStaticFieldValue    = "value"
-	targetingConditionStaticFieldType     = "targetingType"
-	targetingConditionStaticFieldOperator = "valueMatchType"
-	targetingConditionStaticFieldWeight   = "weight"
-	targetingConditionStaticFieldIndex    = "customDataIndex"
-	targetingConditionStaticFieldInclude  = "include"
+	targetingConditionStaticFieldId        = "id"
+	targetingConditionStaticFieldValue     = "value"
+	targetingConditionStaticFieldType      = "targetingType"
+	targetingConditionStaticFieldOperator  = "valueMatchType"
+	targetingConditionStaticFieldWeight    = "weight"
+	targetingConditionStaticFieldIndex     = "customDataIndex"
+	targetingConditionStaticFieldInclude   = "include"
+	targetingConditionStaticFieldIsInclude = "isInclude"
 )
 
 var targetingConditionStaticFields = [...]string{targetingConditionStaticFieldId, targetingConditionStaticFieldValue,
 	targetingConditionStaticFieldType, targetingConditionStaticFieldOperator, targetingConditionStaticFieldWeight,
-	targetingConditionStaticFieldIndex, targetingConditionStaticFieldInclude}
+	targetingConditionStaticFieldIndex, targetingConditionStaticFieldInclude, targetingConditionStaticFieldIsInclude}
 
 type TargetingCondition struct {
-	Rest     map[string]json.RawMessage `json:"-"`
-	Value    interface{}                `json:"value,omitempty"`
-	Type     TargetingType              `json:"targetingType"`
-	Operator OperatorType               `json:"valueMatchType,omitempty"`
-	Index    string                     `json:"customDataIndex,omitempty"`
-	ID       int                        `json:"id"`
-	Weight   int                        `json:"weight,omitempty"`
-	Include  *bool                      `json:"include,omitempty"`
+	Rest      map[string]json.RawMessage `json:"-"`
+	Value     interface{}                `json:"value,omitempty"`
+	Type      TargetingType              `json:"targetingType"`
+	Operator  OperatorType               `json:"valueMatchType,omitempty"`
+	Index     string                     `json:"customDataIndex,omitempty"`
+	ID        int                        `json:"id"`
+	Weight    int                        `json:"weight,omitempty"`
+	Include   *bool                      `json:"include,omitempty"`
+	IsInclude *bool                      `json:"isInclude,omitempty"`
 }
 
 func (c *TargetingCondition) UnmarshalJSON(b []byte) error {
@@ -79,6 +81,8 @@ func (c *TargetingCondition) UnmarshalJSON(b []byte) error {
 			err = json.Unmarshal(value, &c.Index)
 		case targetingConditionStaticFieldInclude:
 			err = json.Unmarshal(value, &c.Include)
+		case targetingConditionStaticFieldIsInclude:
+			err = json.Unmarshal(value, &c.IsInclude)
 		}
 		if err != nil {
 			return err
@@ -109,7 +113,18 @@ func (c TargetingCondition) GetInclude() bool {
 	return *c.Include
 }
 
+func (c TargetingCondition) GetIsInclude() bool {
+	if c.Include == nil {
+		return true
+	}
+	return *c.IsInclude
+}
+
 func (c *TargetingCondition) SetInclude(i bool) {
+	c.Include = &i
+}
+
+func (c *TargetingCondition) SetIsInclude(i bool) {
 	c.Include = &i
 }
 

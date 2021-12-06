@@ -109,3 +109,10 @@ func (t TimeNoTZ) MarshalJSON() ([]byte, error) {
 func (t TimeNoTZ) String() string {
 	return time.Time(t).Format(TimeNoTZLayout)
 }
+
+// UnmarshalJSON string to int
+// func (value *string) UnmarshalJSON(date []byte) error {
+// 	nt, err := time.Parse(TimeNoTZLayout, string(date))
+// 	*t = TimeNoTZ(nt)
+// 	return err
+// }

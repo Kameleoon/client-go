@@ -5,14 +5,18 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Kameleoon/client-go/types"
 	"github.com/segmentio/encoding/json"
+
+	"github.com/Kameleoon/client-go/types"
 )
 
 func NewCustomDatum(c types.TargetingCondition) *CustomDatum {
 	include := false
 	if c.Include != nil {
 		include = *c.Include
+	}
+	if c.IsInclude != nil {
+		include = *c.IsInclude
 	}
 	return &CustomDatum{
 		Type:     c.Type,
@@ -136,12 +140,14 @@ func (c *CustomDatum) CheckTargeting(targetData []types.TargetingData) bool {
 			}
 		}
 	case types.OperatorIsTrue:
-		if val, ok := customDatum.Value.(bool); ok && val {
-			return true
+		val, err := strconv.ParseBool(customDatum.Value.(string))
+		if err == nil {
+			return val
 		}
 	case types.OperatorIsFalse:
-		if val, ok := customDatum.Value.(bool); ok && !val {
-			return true
+		val, err := strconv.ParseBool(customDatum.Value.(string))
+		if err == nil {
+			return !val
 		}
 	}
 	return false

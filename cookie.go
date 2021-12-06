@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valyala/fasthttp"
+
 	"github.com/Kameleoon/client-go/types"
 	"github.com/Kameleoon/client-go/utils"
-	"github.com/valyala/fasthttp"
 )
 
 type Cookie struct {

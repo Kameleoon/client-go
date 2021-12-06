@@ -17,4 +17,5 @@ type FeatureFlag struct {
 	Status             string          `json:"status"`
 	DateCreated        TimeNoTZ        `json:"dateCreated"`
 	DateModified       TimeNoTZ        `json:"dateModified"`
+	RespoolTime        RespoolTime     `json:"respoolTime"`
 }

@@ -16,6 +16,11 @@ type Variation struct {
 	CustomJson            json.RawMessage      `json:"customJson"`
 }
 
+type VariationQL struct {
+	ID int `json:"id,string"`
+	Variation
+}
+
 type VariationRedirectionType string
 
 const (

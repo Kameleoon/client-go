@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kameleoon/client-go/utils"
 	"github.com/segmentio/encoding/json"
+
+	"github.com/Kameleoon/client-go/utils"
 )
 
 type Data interface {

@@ -1,6 +1,7 @@
 package kameleoon
 
 import (
+	"fmt"
 	"net/url"
 	"sort"
 	"strconv"
@@ -17,7 +18,7 @@ import (
 	"github.com/Kameleoon/client-go/utils"
 )
 
-const sdkVersion = "1.0.2"
+const sdkVersion = "1.0.3"
 
 const (
 	API_URL     = "https://api.kameleoon.com"
@@ -102,7 +103,7 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 		}
 		if i == len(c.experiments)-1 {
 			c.m.Unlock()
-			return 0, newErrExperimentConfigNotFound(utils.WriteUint(experimentID))
+			return -1, newErrExperimentConfigNotFound(utils.WriteUint(experimentID))
 		}
 	}
 	c.m.Unlock()
@@ -118,7 +119,7 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 		}
 		segment, ok := ex.TargetingSegment.(*targeting.Segment)
 		if ok && !segment.CheckTargeting(data) {
-			return 0, newErrNotActivated(visitorCode)
+			return -1, newErrNotTargeted(visitorCode)
 		}
 
 		threshold := getHashDouble(ex.ID, visitorCode, ex.RespoolTime)
@@ -143,7 +144,7 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 		req.VariationID = REFERENCE
 		req.NoneVariation = true
 		go c.postTrackingAsync(req)
-		return 0, newErrNotActivated(visitorCode)
+		return -1, newErrNotActivated(visitorCode)
 	}
 
 	data := c.selectSendData()
@@ -181,13 +182,13 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 	c.log("Trigger experiment request: %v", r)
 	if err := c.rest.Do(r, cb); err != nil {
 		c.log("Failed to trigger experiment: %v", err)
-		return 0, err
+		return -1, err
 	}
 	switch id {
 	case "", "null":
-		return 0, newErrNotTargeted(visitorCode)
+		return -1, newErrNotTargeted(visitorCode)
 	case "0":
-		return 0, newErrNotActivated(visitorCode)
+		return -1, newErrNotActivated(visitorCode)
 	}
 
 	return utils.ParseUint(id)
@@ -343,7 +344,7 @@ func (c *Client) activateFeature(visitorCode string, featureKey interface{}, tim
 
 		segment, ok := ff.TargetingSegment.(*targeting.Segment)
 		if ok && !segment.CheckTargeting(data) {
-			return false, newErrNotActivated(visitorCode)
+			return false, newErrNotTargeted(visitorCode)
 		}
 
 		threshold := getHashDouble(ff.ID, visitorCode, nil)
@@ -419,7 +420,9 @@ func (c *Client) GetFeatureVariable(featureKey interface{}, variableKey string) 
 		cj := make(map[string]interface{})
 
 		stringData := string(v.CustomJson[:])
+		stringData = strings.ReplaceAll(stringData, "\\\\\\", "KameleoonTmpSymbol")
 		stringData = strings.ReplaceAll(stringData, "\\", "")
+		stringData = strings.ReplaceAll(stringData, "KameleoonTmpSymbol", "\\")
 		stringData = stringData[1 : len(stringData)-1]
 
 		if err = json.Unmarshal([]byte(stringData), &cj); err != nil {
@@ -432,7 +435,30 @@ func (c *Client) GetFeatureVariable(featureKey interface{}, variableKey string) 
 	if customJson == nil {
 		return nil, newErrFeatureVariableNotFound("Feature variable not found")
 	}
-	return customJson, nil
+	return c.parseFeatureVariable(customJson), nil
+}
+
+func (c *Client) parseFeatureVariable(customJson interface{}) interface{} {
+	var value interface{}
+	if mapInterface, ok := customJson.(map[string]interface{}); ok {
+		switch mapInterface["type"] {
+		case "Boolean":
+			value, _ = strconv.ParseBool(mapInterface["value"].(string))
+		case "Number":
+			value, _ = strconv.Atoi(mapInterface["value"].(string))
+		case "String":
+			value = mapInterface["value"]
+		case "JSON":
+			if valueString, ok := mapInterface["value"].(string); ok {
+				if err := json.Unmarshal([]byte(valueString), &value); err != nil {
+					value = nil
+				}
+			}
+		default:
+			value = nil
+		}
+	}
+	return value
 }
 
 func (c *Client) getFeatureFlag(featureKey interface{}) (types.FeatureFlag, error) {
@@ -567,15 +593,27 @@ func (c *Client) fetchConfig() error {
 	if err := c.fetchToken(); err != nil {
 		return err
 	}
-	siteID, err := c.fetchSiteID()
+	// Rest API
+	// siteID, err := c.fetchSiteID()
+	// if err != nil {
+	// 	return err
+	// }
+	// experiments, err := c.fetchExperiments(siteID)
+	// if err != nil {
+	// 	return err
+	// }
+	// featureFlags, err := c.fetchFeatureFlags(siteID)
+
+	//GraphQL
+	experiments, err := c.fetchExperimentsGraphQL(c.Cfg.SiteCode)
+	fmt.Println(experiments)
 	if err != nil {
 		return err
 	}
-	experiments, err := c.fetchExperiments(siteID)
+	featureFlags, err := c.fetchFeatureFlagsGraphQL(c.Cfg.SiteCode)
 	if err != nil {
 		return err
 	}
-	featureFlags, err := c.fetchFeatureFlags(siteID)
 
 	c.m.Lock()
 	c.experiments = append(c.experiments, experiments...)
@@ -643,10 +681,42 @@ func (c *Client) fetchSiteID() (int, error) {
 	}
 	err := c.fetchOne("/sites", fetchQuery{PerPage: 1}, filter, cb)
 	if len(res) == 0 {
-		return 0, ErrEmptyResponse
+		return -1, ErrEmptyResponse
 	}
 	c.log("Sites are fetched: %v", res)
 	return res[0].ID, err
+}
+
+func (c *Client) fetchExperimentsGraphQL(siteCode string, perPage ...int) ([]types.Experiment, error) {
+	c.log("Fetching experiments")
+	pp := -1
+	if len(perPage) > 0 {
+		pp = perPage[0]
+	}
+	var ex []types.Experiment
+	cb := func(resp *fasthttp.Response, err error) error {
+		if err != nil {
+			return err
+		}
+		b := resp.Body()
+		if len(b) == 0 {
+			return ErrEmptyResponse
+		}
+		var res ExperimentDataGraphQL
+		fmt.Println(string(b))
+		err = json.Unmarshal(b, &res)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		for _, expQL := range res.Data.Experiments.Edge {
+			ex = append(ex, expQL.Transform())
+		}
+		return nil
+	}
+	err := c.fetchAllGraphQL(GetExperimentsGraphQL(siteCode), fetchQuery{PerPage: pp}, cb)
+	c.log("Experiment are fetched: %v", ex)
+	return ex, err
 }
 
 func (c *Client) fetchExperiments(siteID int, perPage ...int) ([]types.Experiment, error) {
@@ -747,6 +817,39 @@ func (c *Client) fetchSegment(id int) (*types.Segment, error) {
 	return s, err
 }
 
+func (c *Client) fetchFeatureFlagsGraphQL(siteCode string, perPage ...int) ([]types.FeatureFlag, error) {
+	c.log("Fetching feature flags")
+	pp := -1
+	if len(perPage) > 0 {
+		pp = perPage[0]
+	}
+	var ff []types.FeatureFlag
+	cb := func(resp *fasthttp.Response, err error) error {
+		if err != nil {
+			return err
+		}
+		b := resp.Body()
+		if len(b) == 0 {
+			return ErrEmptyResponse
+		}
+		fmt.Println(string(b))
+		var res FeatureFlagDataGraphQL
+		err = json.Unmarshal(b, &res)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		for _, ffQL := range res.Data.FeatureFlags.Edge {
+			ff = append(ff, ffQL.Transform())
+		}
+		return nil
+	}
+
+	err := c.fetchAllGraphQL(GetFeatureFlagsGraphQL(siteCode), fetchQuery{PerPage: pp}, cb)
+	c.log("Feature flags are fetched: %v", ff)
+	return ff, err
+}
+
 func (c *Client) fetchFeatureFlags(siteID int, perPage ...int) ([]types.FeatureFlag, error) {
 	c.log("Fetching feature flags")
 	pp := -1
@@ -774,6 +877,7 @@ func (c *Client) fetchFeatureFlags(siteID int, perPage ...int) ([]types.FeatureF
 		if len(b) == 0 {
 			return ErrEmptyResponse
 		}
+		fmt.Println(string(b))
 		res := []types.FeatureFlag{{}}
 		if b[0] == '[' {
 			err = json.Unmarshal(b, &res)
@@ -833,6 +937,38 @@ type fetchFilter struct {
 	Parameters interface{} `json:"parameters"`
 }
 
+func (c *Client) fetchAllGraphQL(queryQL string, q fetchQuery, cb respCallback) error {
+	currentPage := 1
+	lastPage := -1
+	iterator := func(resp *fasthttp.Response, err error) error {
+		if resp.StatusCode() >= fasthttp.StatusBadRequest {
+			return ErrBadStatus
+		}
+		var cbErr error
+		if cb != nil {
+			cbErr = cb(resp, err)
+		}
+		if lastPage < 0 {
+			count := resp.Header.Peek(HeaderPaginationCount)
+			lastPage, err = fasthttp.ParseUint(count)
+			return err
+		}
+		return cbErr
+	}
+	for {
+		q.Page = currentPage
+		if lastPage >= 0 && currentPage > lastPage {
+			break
+		}
+		err := c.fetchOneGraphQL(queryQL, q, iterator)
+		if err != nil {
+			break
+		}
+		currentPage++
+	}
+	return nil
+}
+
 func (c *Client) fetchAll(path string, q fetchQuery, filters []fetchFilter, cb respCallback) error {
 	currentPage := 1
 	lastPage := -1
@@ -863,6 +999,30 @@ func (c *Client) fetchAll(path string, q fetchQuery, filters []fetchFilter, cb r
 		currentPage++
 	}
 	return nil
+}
+
+func (c *Client) fetchOneGraphQL(queryQL string, q fetchQuery, cb respCallback) error {
+	uri, err := buildFetchPathGraphQL(API_URL+"/v1/graphql", q)
+	if err != nil {
+		return err
+	}
+	req := request{
+		Method:      MethodPost,
+		URL:         uri,
+		ContentType: HeaderContentTypeJson,
+		BodyString:  queryQL,
+	}
+	c.m.Lock()
+	req.AuthToken = c.token
+	c.m.Unlock()
+	if len(req.AuthToken) == 0 {
+		return newErrCredentialsNotFound(req.String())
+	}
+	err = c.rest.Do(req, cb)
+	if err != nil {
+		c.log("Failed to fetch: %v, request: %v", err, req)
+	}
+	return err
 }
 
 func (c *Client) fetchOne(path string, q fetchQuery, filters []fetchFilter, cb respCallback) error {
@@ -919,6 +1079,31 @@ func buildFetchPath(base, path string, q fetchQuery, filters []fetchFilter) (str
 			return "", err
 		}
 		buf.WriteString(url.QueryEscape(string(fbuf)))
+	}
+	return buf.String(), nil
+}
+
+func buildFetchPathGraphQL(base string, q fetchQuery) (string, error) {
+	var buf strings.Builder
+	buf.WriteString(base)
+	isFirst := true
+	writeDelim := func() {
+		if !isFirst {
+			buf.WriteByte('&')
+		} else {
+			buf.WriteByte('?')
+			isFirst = false
+		}
+	}
+	if q.PerPage > 0 {
+		writeDelim()
+		buf.WriteString("perPage=")
+		buf.WriteString(strconv.Itoa(q.PerPage))
+	}
+	if q.Page > 0 {
+		writeDelim()
+		buf.WriteString("page=")
+		buf.WriteString(strconv.Itoa(q.Page))
 	}
 	return buf.String(), nil
 }

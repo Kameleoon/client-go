@@ -17,3 +17,8 @@ type Segment struct {
 	ExperimentIds            []string        `json:"experiments,omitempty"`
 	PersonalizationIds       []string        `json:"personalizations,omitempty"`
 }
+
+type SegmentQL struct {
+	ID int `json:"id,string"`
+	Segment
+}
