@@ -56,7 +56,7 @@ func (c *Config) defaults() {
 		c.VisitorDataMaxSize = DefaultVisitorDataMaxSize
 	}
 	if len(c.Version) == 0 {
-		c.Version = sdkVersion
+		c.Version = SDKVersion
 	}
 	if len(c.TrackingVersion) == 0 {
 		c.TrackingVersion = DefaultTrackingVersion

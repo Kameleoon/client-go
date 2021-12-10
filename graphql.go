@@ -121,7 +121,7 @@ func GetFeatureFlagsGraphQL(siteCode string) string {
 					"condition": {
 						"field": "featureStatus",
 						"operator": "IN",
-						"parameters": ["ACTIVATED"]
+						"parameters": ["ACTIVATED", "SCHEDULED", "DEACTIVATED"]
 					}
 				}, {
 					"condition": {

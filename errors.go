@@ -120,3 +120,15 @@ func newErrNotActivated(msg string) error {
 func (e ErrNotActivated) Error() string {
 	return "visitor " + e.Message + " is not activated"
 }
+
+type ErrVisitorCodeNotValid struct {
+	APIError
+}
+
+func newErrVisitorCodeNotValid(msg string) error {
+	return &ErrVisitorCodeNotValid{APIError{Message: msg}}
+}
+
+func (e ErrVisitorCodeNotValid) Error() string {
+	return "Visitor code not valid: " + e.Message
+}

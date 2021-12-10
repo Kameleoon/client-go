@@ -18,13 +18,14 @@ import (
 	"github.com/Kameleoon/client-go/utils"
 )
 
-const sdkVersion = "1.0.3"
+const SDKVersion = "1.0.4"
 
 const (
-	API_URL     = "https://api.kameleoon.com"
-	API_OAUTH   = "https://api.kameleoon.com/oauth/token"
-	API_SSX_URL = "https://api-ssx.kameleoon.com"
-	REFERENCE   = "0"
+	API_URL                       = "https://api.kameleoon.com"
+	API_OAUTH                     = "https://api.kameleoon.com/oauth/token"
+	API_SSX_URL                   = "https://api-ssx.kameleoon.com"
+	REFERENCE                     = "0"
+	KAMELEOON_VISITOR_CODE_LENGTH = 255
 )
 
 type Client struct {
@@ -94,6 +95,9 @@ func (c *Client) TriggerExperimentTimeout(visitorCode string, experimentID int, 
 }
 
 func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout ...time.Duration) (int, error) {
+	if _, err := c.validateVisitorCode(visitorCode); err != nil {
+		return -1, err
+	}
 	var ex types.Experiment
 	c.m.Lock()
 	for i, e := range c.experiments {
@@ -200,10 +204,13 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 // Kameleoon back-end servers by itself. Instead, the declared data is saved for future sending via the flush method.
 // This reduces the number of server calls made, as data is usually grouped into a single server call triggered by
 // the execution of the flush method.
-func (c *Client) AddData(visitorCode string, data ...types.Data) {
+func (c *Client) AddData(visitorCode string, data ...types.Data) error {
 	// TODO think about memory size and c.Cfg.VisitorDataMaxSize
 	//var stats runtime.MemStats
-	//runtime.ReadMemStats(&stats)
+	//runtime.ReadMemStats(&stats))
+	if _, err := c.validateVisitorCode(visitorCode); err != nil {
+		return err
+	}
 	t := time.Now()
 	td := make([]types.TargetingData, len(data))
 	for i := 0; i < len(data); i++ {
@@ -218,7 +225,7 @@ func (c *Client) AddData(visitorCode string, data ...types.Data) {
 			Data:  td,
 			Index: make(map[int]struct{}),
 		})
-		return
+		return nil
 	}
 	cell, ok := actual.(*types.DataCell)
 	if !ok {
@@ -226,10 +233,11 @@ func (c *Client) AddData(visitorCode string, data ...types.Data) {
 			Data:  td,
 			Index: make(map[int]struct{}),
 		})
-		return
+		return nil
 	}
 	cell.Data = append(cell.Data, td...)
 	c.Data.Set(visitorCode, cell)
+	return nil
 }
 
 func (c *Client) getDataCell(visitorCode string) *types.DataCell {
@@ -250,21 +258,25 @@ func (c *Client) getDataCell(visitorCode string) *types.DataCell {
 // In addition, this method also accepts revenue as a third optional argument to track revenue.
 // The visitorCode usually is identical to the one that was used when triggering the experiment.
 // This method is non-blocking as the server call is made asynchronously.
-func (c *Client) TrackConversion(visitorCode string, goalID int) {
-	c.trackConversion(visitorCode, goalID)
+func (c *Client) TrackConversion(visitorCode string, goalID int) error {
+	return c.trackConversion(visitorCode, goalID)
 }
 
-func (c *Client) TrackConversionRevenue(visitorCode string, goalID int, revenue float64) {
-	c.trackConversion(visitorCode, goalID, revenue)
+func (c *Client) TrackConversionRevenue(visitorCode string, goalID int, revenue float64) error {
+	return c.trackConversion(visitorCode, goalID, revenue)
 }
 
-func (c *Client) trackConversion(visitorCode string, goalID int, revenue ...float64) {
+func (c *Client) trackConversion(visitorCode string, goalID int, revenue ...float64) error {
+	if _, err := c.validateVisitorCode(visitorCode); err != nil {
+		return err
+	}
 	conv := types.Conversion{GoalID: goalID}
 	if len(revenue) > 0 {
 		conv.Revenue = revenue[0]
 	}
 	c.AddData(visitorCode, &conv)
 	c.FlushVisitor(visitorCode)
+	return nil
 }
 
 // FlushVisitor the associated data.
@@ -272,11 +284,15 @@ func (c *Client) trackConversion(visitorCode string, goalID int, revenue ...floa
 // The data added with the method AddData, is not directly sent to the kameleoon servers.
 // It's stored and accumulated until it is sent automatically by the TriggerExperiment or TrackConversion methods.
 // With this method you can manually send it.
-func (c *Client) FlushVisitor(visitorCode string) {
+func (c *Client) FlushVisitor(visitorCode string) error {
+	if _, err := c.validateVisitorCode(visitorCode); err != nil {
+		return err
+	}
 	go c.postTrackingAsync(trackingRequest{
 		Type:        TrackingRequestData,
 		VisitorCode: visitorCode,
 	})
+	return nil
 }
 
 func (c *Client) FlushAll() {
@@ -327,6 +343,9 @@ func (c *Client) ActivateFeatureTimeout(visitorCode string, featureKey interface
 }
 
 func (c *Client) activateFeature(visitorCode string, featureKey interface{}, timeout ...time.Duration) (bool, error) {
+	if _, err := c.validateVisitorCode(visitorCode); err != nil {
+		return false, err
+	}
 	ff, err := c.getFeatureFlag(featureKey)
 	if err != nil {
 		return false, err
@@ -345,6 +364,10 @@ func (c *Client) activateFeature(visitorCode string, featureKey interface{}, tim
 		segment, ok := ff.TargetingSegment.(*targeting.Segment)
 		if ok && !segment.CheckTargeting(data) {
 			return false, newErrNotTargeted(visitorCode)
+		}
+
+		if !ff.IsScheduleActive() {
+			return false, nil
 		}
 
 		threshold := getHashDouble(ff.ID, visitorCode, nil)
@@ -435,10 +458,10 @@ func (c *Client) GetFeatureVariable(featureKey interface{}, variableKey string) 
 	if customJson == nil {
 		return nil, newErrFeatureVariableNotFound("Feature variable not found")
 	}
-	return c.parseFeatureVariable(customJson), nil
+	return parseFeatureVariable(customJson), nil
 }
 
-func (c *Client) parseFeatureVariable(customJson interface{}) interface{} {
+func parseFeatureVariable(customJson interface{}) interface{} {
 	var value interface{}
 	if mapInterface, ok := customJson.(map[string]interface{}); ok {
 		switch mapInterface["type"] {
@@ -832,7 +855,6 @@ func (c *Client) fetchFeatureFlagsGraphQL(siteCode string, perPage ...int) ([]ty
 		if len(b) == 0 {
 			return ErrEmptyResponse
 		}
-		fmt.Println(string(b))
 		var res FeatureFlagDataGraphQL
 		err = json.Unmarshal(b, &res)
 		if err != nil {

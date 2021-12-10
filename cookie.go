@@ -52,16 +52,29 @@ func (c *Client) GetVisitorCode(req *fasthttp.Request, defaultVisitorCode ...str
 // SetVisitorCode should be called to set the Kameleoon visitorCode in response cookie.
 //
 // The server-side (via HTTP header) kameleoonVisitorCode cookie is set with the value.
-func (c *Client) SetVisitorCode(resp *fasthttp.Response, visitorCode, domain string) {
+func (c *Client) SetVisitorCode(resp *fasthttp.Response, visitorCode, domain string) error {
 	cookie := newVisitorCodeCookie(visitorCode, domain)
 	resp.Header.SetCookie(cookie)
 	fasthttp.ReleaseCookie(cookie)
+	return nil
 }
 
-func (c *Client) ObtainVisitorCode(req *fasthttp.Request, resp *fasthttp.Response, domain string, defaultVisitorCode ...string) string {
+func (c *Client) ObtainVisitorCode(req *fasthttp.Request, resp *fasthttp.Response, domain string, defaultVisitorCode ...string) (string, error) {
 	visitorCode := c.GetVisitorCode(req, defaultVisitorCode...)
+	if _, err := c.validateVisitorCode(visitorCode); err != nil {
+		return visitorCode, err
+	}
 	c.SetVisitorCode(resp, visitorCode, domain)
-	return visitorCode
+	return visitorCode, nil
+}
+
+func (c *Client) validateVisitorCode(visitorCode string) (bool, error) {
+	if visitorCode == "" {
+		return false, newErrVisitorCodeNotValid("empty visitor code")
+	} else if len(visitorCode) > KAMELEOON_VISITOR_CODE_LENGTH {
+		return false, newErrVisitorCodeNotValid("is longer than 255 chars")
+	}
+	return true, nil
 }
 
 func readVisitorCode(req *fasthttp.Request) string {
