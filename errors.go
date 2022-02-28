@@ -132,3 +132,15 @@ func newErrVisitorCodeNotValid(msg string) error {
 func (e ErrVisitorCodeNotValid) Error() string {
 	return "Visitor code not valid: " + e.Message
 }
+
+type ErrSiteCodeDisabled struct {
+	APIError
+}
+
+func newSiteCodeDisabled(msg string) error {
+	return &ErrSiteCodeDisabled{APIError{Message: msg}}
+}
+
+func (e ErrSiteCodeDisabled) Error() string {
+	return "Site with siteCode '" + e.Message + "' is disabled"
+}

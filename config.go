@@ -15,10 +15,11 @@ const (
 	DefaultVisitorDataMaxSize   = 500 // 500 mb
 	DefaultTrackingVersion      = "sdk/go/2.0.1"
 	UserAgent                   = "kameleoon-client-go/"
+	DefaultEnvironment          = "production"
 )
 
 type Config struct {
-	REST                 RestConfig
+	Network              NetworkConfig
 	Logger               Logger        `yml:"-" yaml:"-"`
 	SiteCode             string        `yml:"site_code" yaml:"site_code"`
 	TrackingURL          string        `yml:"tracking_url" yaml:"tracking_url" default:"https://api-ssx.kameleoon.com"`
@@ -32,6 +33,7 @@ type Config struct {
 	VisitorDataMaxSize   int           `yml:"visitor_data_max_size" yaml:"visitor_data_max_size"`
 	BlockingMode         bool          `yml:"blocking_mode" yaml:"blocking_mode"`
 	VerboseMode          bool          `yml:"verbose_mode" yaml:"verbose_mode"`
+	Environment          string        `yml:"environment" yaml:"environment"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -61,7 +63,10 @@ func (c *Config) defaults() {
 	if len(c.TrackingVersion) == 0 {
 		c.TrackingVersion = DefaultTrackingVersion
 	}
-	c.REST.defaults(c.Version)
+	if len(c.Environment) == 0 {
+		c.Environment = DefaultEnvironment
+	}
+	c.Network.defaults(c.Version)
 }
 
 func (c *Config) Load(path string) error {
@@ -97,7 +102,7 @@ const (
 	DefaultMaxConnsPerHost = 10000
 )
 
-type RestConfig struct {
+type NetworkConfig struct {
 	ProxyURL        string
 	UserAgent       string
 	DoTimeout       time.Duration
@@ -106,7 +111,7 @@ type RestConfig struct {
 	MaxConnsPerHost int
 }
 
-func (c *RestConfig) defaults(version string) {
+func (c *NetworkConfig) defaults(version string) {
 	var b strings.Builder
 	b.WriteString(UserAgent)
 	b.WriteString(version)

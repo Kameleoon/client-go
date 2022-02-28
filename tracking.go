@@ -51,7 +51,7 @@ func (c *Client) postTrackingAsync(r trackingRequest) {
 		req.BodyString = sb.String()
 		sb.Reset()
 		for i := defaultPostMaxRetries; i > 0; i-- {
-			err = c.rest.Do(req, nil)
+			err = c.network.Do(req, nil)
 			if err == nil {
 				break
 			}

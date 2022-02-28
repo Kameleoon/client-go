@@ -27,6 +27,7 @@ type FeatureFlag struct {
 	RespoolTime        RespoolTime     `json:"respoolTime"`
 	FeatureStatus      string          `json:"featureStatus"`
 	Schedules          []Schedule      `json:"schedules"`
+	Site               Site            `json:"site,omitempty"`
 }
 
 type Schedule struct {

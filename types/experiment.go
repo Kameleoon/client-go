@@ -14,6 +14,12 @@ const (
 	ExperimentTypeHybrid     ExperimentType = "HYBRID"
 )
 
+type Site struct {
+	Id                 string `json:"id"`
+	Code               string `json:"code"`
+	IsKameleoonEnabled bool   `json:"isKameleoonEnabled"`
+}
+
 type Experiment struct {
 	ID                     int                        `json:"id"`
 	SiteID                 int                        `json:"siteId,omitempty"`
@@ -42,6 +48,7 @@ type Experiment struct {
 	CreatedBy              int                        `json:"createdBy,omitempty"`
 	CommonCssCode          json.RawMessage            `json:"commonCssCode,omitempty"`
 	CommonJavaScriptCode   json.RawMessage            `json:"commonJavaScriptCode,omitempty"`
+	Site                   Site                       `json:"site,omitempty"`
 }
 
 type Deviations map[string]float64

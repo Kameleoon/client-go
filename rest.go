@@ -22,18 +22,18 @@ const (
 	MethodPost = fasthttp.MethodPost
 )
 
-type restClient interface {
+type networkClient interface {
 	Do(r request, callback respCallback) error
 }
 
 type rest struct {
-	cfg *RestConfig
+	cfg *NetworkConfig
 	c   *fasthttp.Client
 }
 
 type respCallback func(resp *fasthttp.Response, err error) error
 
-func newRESTClient(cfg *RestConfig) restClient {
+func newNetworkClient(cfg *NetworkConfig) networkClient {
 	c := &fasthttp.Client{
 		Name:            cfg.UserAgent,
 		ReadTimeout:     cfg.ReadTimeout,

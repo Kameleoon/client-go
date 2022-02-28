@@ -18,7 +18,7 @@ import (
 	"github.com/Kameleoon/client-go/utils"
 )
 
-const SDKVersion = "1.0.4"
+const SDKVersion = "1.0.5"
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
@@ -29,9 +29,9 @@ const (
 )
 
 type Client struct {
-	Data *hashmap.HashMap
-	Cfg  *Config
-	rest restClient
+	Data    *hashmap.HashMap
+	Cfg     *Config
+	network networkClient
 
 	m            sync.Mutex
 	init         bool
@@ -43,9 +43,9 @@ type Client struct {
 
 func NewClient(cfg *Config) *Client {
 	c := &Client{
-		Cfg:  cfg,
-		rest: newRESTClient(&cfg.REST),
-		Data: new(hashmap.HashMap),
+		Cfg:     cfg,
+		network: newNetworkClient(&cfg.Network),
+		Data:    new(hashmap.HashMap),
 	}
 	go c.updateConfig()
 	return c
@@ -117,6 +117,9 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 		ExperimentID: ex.ID,
 	}
 	if !c.Cfg.BlockingMode {
+		if !isSiteCodeEnable(ex.Site) {
+			return -1, newSiteCodeDisabled(c.Cfg.SiteCode)
+		}
 		var data []types.TargetingData
 		if cell := c.getDataCell(visitorCode); cell != nil {
 			data = cell.Data
@@ -184,7 +187,7 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 		return err
 	}
 	c.log("Trigger experiment request: %v", r)
-	if err := c.rest.Do(r, cb); err != nil {
+	if err := c.network.Do(r, cb); err != nil {
 		c.log("Failed to trigger experiment: %v", err)
 		return -1, err
 	}
@@ -356,6 +359,9 @@ func (c *Client) activateFeature(visitorCode string, featureKey interface{}, tim
 		ExperimentID: ff.ID,
 	}
 	if !c.Cfg.BlockingMode {
+		if !isSiteCodeEnable(ff.Site) {
+			return false, newSiteCodeDisabled(c.Cfg.SiteCode)
+		}
 		var data []types.TargetingData
 		if cell := c.getDataCell(visitorCode); cell != nil {
 			data = cell.Data
@@ -371,7 +377,7 @@ func (c *Client) activateFeature(visitorCode string, featureKey interface{}, tim
 		}
 
 		threshold := getHashDouble(ff.ID, visitorCode, nil)
-		if threshold <= ff.ExpositionRate {
+		if threshold >= 1-ff.ExpositionRate {
 			if len(ff.VariationsID) > 0 {
 				req.VariationID = utils.WriteUint(ff.VariationsID[0])
 			}
@@ -416,7 +422,7 @@ func (c *Client) activateFeature(visitorCode string, featureKey interface{}, tim
 		return err
 	}
 	c.log("Activate feature request: %v", r)
-	if err = c.rest.Do(r, cb); err != nil {
+	if err = c.network.Do(r, cb); err != nil {
 		c.log("Failed to get activation: %v", err)
 		return false, err
 	}
@@ -574,7 +580,7 @@ func (c *Client) fetchToken() error {
 		BodyString:  form.Encode(),
 	}
 
-	err := c.rest.Do(r, respCallbackJson(&resp))
+	err := c.network.Do(r, respCallbackJson(&resp))
 	if err != nil {
 		c.log("Failed to fetch bearer token: %v", err)
 		return err
@@ -867,7 +873,7 @@ func (c *Client) fetchFeatureFlagsGraphQL(siteCode string, perPage ...int) ([]ty
 		return nil
 	}
 
-	err := c.fetchAllGraphQL(GetFeatureFlagsGraphQL(siteCode), fetchQuery{PerPage: pp}, cb)
+	err := c.fetchAllGraphQL(GetFeatureFlagsGraphQL(siteCode, c.Cfg.Environment), fetchQuery{PerPage: pp}, cb)
 	c.log("Feature flags are fetched: %v", ff)
 	return ff, err
 }
@@ -1040,7 +1046,7 @@ func (c *Client) fetchOneGraphQL(queryQL string, q fetchQuery, cb respCallback) 
 	if len(req.AuthToken) == 0 {
 		return newErrCredentialsNotFound(req.String())
 	}
-	err = c.rest.Do(req, cb)
+	err = c.network.Do(req, cb)
 	if err != nil {
 		c.log("Failed to fetch: %v, request: %v", err, req)
 	}
@@ -1063,7 +1069,7 @@ func (c *Client) fetchOne(path string, q fetchQuery, filters []fetchFilter, cb r
 	if len(req.AuthToken) == 0 {
 		return newErrCredentialsNotFound(req.String())
 	}
-	err = c.rest.Do(req, cb)
+	err = c.network.Do(req, cb)
 	if err != nil {
 		c.log("Failed to fetch: %v, request: %v", err, req)
 	}
@@ -1128,4 +1134,8 @@ func buildFetchPathGraphQL(base string, q fetchQuery) (string, error) {
 		buf.WriteString(strconv.Itoa(q.Page))
 	}
 	return buf.String(), nil
+}
+
+func isSiteCodeEnable(site types.Site) bool {
+	return site != types.Site{} && site.IsKameleoonEnabled
 }
