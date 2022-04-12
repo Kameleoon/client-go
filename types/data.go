@@ -9,6 +9,8 @@ import (
 	"github.com/segmentio/encoding/json"
 
 	"github.com/Kameleoon/client-go/utils"
+
+	"net/url"
 )
 
 type Data interface {
@@ -104,11 +106,12 @@ func (c CustomData) QueryEncode() string {
 	val.WriteString(`[["`)
 	val.WriteString(fmt.Sprint(c.Value))
 	val.WriteString(`",1]]`)
+	valueToCount := EncodeURIComponent("valueToCount", val.String())
 	var b strings.Builder
 	b.WriteString("eventType=customData&index=")
 	b.WriteString(c.ID)
-	b.WriteString("&valueToCount=")
-	b.WriteString(val.String())
+	b.WriteString("&")
+	b.WriteString(valueToCount)
 	b.WriteString("&overwrite=true&nonce=")
 	b.WriteString(GetNonce())
 	return b.String()
@@ -154,12 +157,12 @@ type PageView struct {
 
 func (v PageView) QueryEncode() string {
 	var b strings.Builder
-	b.WriteString("eventType=page&href=")
-	b.WriteString(v.URL)
+	b.WriteString("eventType=page&")
+	b.WriteString(EncodeURIComponent("href", v.URL))
 	b.WriteString("&title=")
 	b.WriteString(v.Title)
 	b.WriteString("&keyPages=[]")
-	if v.Referrer == 0 {
+	if v.Referrer != 0 {
 		b.WriteString("&referrers=[")
 		b.WriteString(strconv.Itoa(v.Referrer))
 		b.WriteByte(']')
@@ -212,4 +215,19 @@ func (c Conversion) QueryEncode() string {
 
 func (c Conversion) DataType() DataType {
 	return DataTypeConversion
+}
+
+func EncodeURIComponent(key string, value string) string {
+	parameters := url.Values{}
+	parameters.Add(key, value)
+	encoded := parameters.Encode()
+
+	encoded = strings.ReplaceAll(encoded, "+", "%20")
+	encoded = strings.ReplaceAll(encoded, "%21", "!")
+	encoded = strings.ReplaceAll(encoded, "%27", "'")
+	encoded = strings.ReplaceAll(encoded, "%28", "(")
+	encoded = strings.ReplaceAll(encoded, "%29", ")")
+	encoded = strings.ReplaceAll(encoded, "%2A", "*")
+
+	return encoded
 }

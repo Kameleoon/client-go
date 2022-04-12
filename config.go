@@ -13,7 +13,7 @@ const (
 	DefaultConfigUpdateInterval = time.Hour
 	DefaultRequestTimeout       = 2 * time.Second
 	DefaultVisitorDataMaxSize   = 500 // 500 mb
-	DefaultTrackingVersion      = "sdk/go/2.0.1"
+	DefaultTrackingVersion      = "sdk/go/" + SDKVersion
 	UserAgent                   = "kameleoon-client-go/"
 	DefaultEnvironment          = "production"
 )
