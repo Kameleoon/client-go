@@ -18,12 +18,13 @@ import (
 	"github.com/Kameleoon/client-go/utils"
 )
 
-const SDKVersion = "1.0.5"
+const SDKVersion = "1.0.6"
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
 	API_OAUTH                     = "https://api.kameleoon.com/oauth/token"
 	API_SSX_URL                   = "https://api-ssx.kameleoon.com"
+	API_DATA_URL                  = "https://api-data.kameleoon.com"
 	REFERENCE                     = "0"
 	KAMELEOON_VISITOR_CODE_LENGTH = 255
 )
@@ -488,6 +489,55 @@ func parseFeatureVariable(customJson interface{}) interface{} {
 		}
 	}
 	return value
+}
+
+// The RetrieveDataFromRemoteSource method allows you to retrieve data (according to a key passed as
+// argument)stored on a remote Kameleoon server. Usually data will be stored on our remote servers
+// via the use of our Data API. This method, along with the availability of our highly scalable servers
+// for this purpose, provides a convenient way to quickly store massive amounts of data that
+// can be later retrieved for each of your visitors / users.
+//
+// returns Network timeout error
+func (c *Client) RetrieveDataFromRemoteSource(key string, timeout ...time.Duration) ([]byte, error) {
+	r := request{
+		URL:          c.buildAPIDataPath(key),
+		Method:       MethodGet,
+		ContentType:  HeaderContentTypeJson,
+		ClientHeader: c.Cfg.TrackingVersion,
+	}
+	if len(timeout) > 0 {
+		r.Timeout = timeout[0]
+	} else {
+		r.Timeout = DefaultDoTimeout
+	}
+	var data []byte
+	cb := func(resp *fasthttp.Response, err error) error {
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode() >= fasthttp.StatusBadRequest {
+			return ErrBadStatus
+		}
+		data = resp.Body()
+		return nil
+	}
+	c.log("Retrieve data from remote source: %v", r)
+	if err := c.network.Do(r, cb); err != nil {
+		c.log("Failed retrieve data from remote source: %v", err)
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func (c *Client) buildAPIDataPath(key string) string {
+	var url strings.Builder
+	url.WriteString(API_DATA_URL)
+	url.WriteString("/data?siteCode=")
+	url.WriteString(c.Cfg.SiteCode)
+	url.WriteString("&")
+	url.WriteString(types.EncodeURIComponent("key", key))
+	return url.String()
 }
 
 func (c *Client) getFeatureFlag(featureKey interface{}) (types.FeatureFlag, error) {
