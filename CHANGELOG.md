@@ -1,6 +1,9 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 2.0.2 - 2023-01-02
+* Removed dependency on first version
+
 ## 2.0.1 - 2023-01-02
 * Fixed issue with distribution of v2
 

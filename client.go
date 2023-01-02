@@ -15,7 +15,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-const SDKVersion = "2.0.1"
+const SDKVersion = "2.0.2"
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
