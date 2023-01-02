@@ -58,6 +58,8 @@ const (
 	TargetingVisitedPages           TargetingType = "VISITED_PAGES"
 	TargetingMeanPageDuration       TargetingType = "MEAN_PAGE_DURATION"
 	TargetingTimeSincePreviousVisit TargetingType = "TIME_SINCE_PREVIOUS_VISIT"
+	TargetingTargetExperiment       TargetingType = "TARGET_EXPERIMENT"
+	TargetingExclusiveExperiment    TargetingType = "EXCLUSIVE_EXPERIMENT"
 )
 
 type TargetingConfigurationType string
@@ -72,13 +74,20 @@ const (
 type OperatorType string
 
 const (
-	OperatorUndefined OperatorType = "UNDEFINED"
-	OperatorContains  OperatorType = "CONTAINS"
-	OperatorExact     OperatorType = "EXACT"
-	OperatorMatch     OperatorType = "REGULAR_EXPRESSION"
-	OperatorLower     OperatorType = "LOWER"
-	OperatorEqual     OperatorType = "EQUAL"
-	OperatorGreater   OperatorType = "GREATER"
-	OperatorIsTrue    OperatorType = "TRUE"
-	OperatorIsFalse   OperatorType = "FALSE"
+	OperatorUndefined     OperatorType = "UNDEFINED"
+	OperatorContains      OperatorType = "CONTAINS"
+	OperatorExact         OperatorType = "EXACT"
+	OperatorAny           OperatorType = "ANY"
+	OperatorMatch         OperatorType = "REGULAR_EXPRESSION"
+	OperatorLower         OperatorType = "LOWER"
+	OperatorEqual         OperatorType = "EQUAL"
+	OperatorGreater       OperatorType = "GREATER"
+	OperatorIsTrue        OperatorType = "TRUE"
+	OperatorIsFalse       OperatorType = "FALSE"
+	OperatorIsAmongValues OperatorType = "AMONG_VALUES"
 )
+
+type ExclusiveExperimentTargetedData struct {
+	ExperimentId            int
+	VisitorVariationStorage map[int]int
+}

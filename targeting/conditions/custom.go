@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/segmentio/encoding/json"
-
 	"github.com/Kameleoon/client-go/types"
+	"github.com/Kameleoon/client-go/utils"
+	"github.com/segmentio/encoding/json"
 )
 
 func NewCustomDatum(c types.TargetingCondition) *CustomDatum {
@@ -39,39 +39,12 @@ type CustomDatum struct {
 	Include  bool                `json:"include"`
 }
 
-func (c *CustomDatum) String() string {
-	if c == nil {
-		return ""
+func (c *CustomDatum) CheckTargeting(targetData interface{}) bool {
+	if _, ok := targetData.([]types.TargetingData); !ok {
+		return false
 	}
-	b, err := json.Marshal(c)
-	if err != nil {
-		return ""
-	}
-	var s strings.Builder
-	s.Grow(len(b))
-	s.Write(b)
-	return s.String()
-}
-
-func (c CustomDatum) GetType() types.TargetingType {
-	return c.Type
-}
-
-func (c *CustomDatum) SetType(t types.TargetingType) {
-	c.Type = t
-}
-
-func (c CustomDatum) GetInclude() bool {
-	return c.Include
-}
-
-func (c *CustomDatum) SetInclude(i bool) {
-	c.Include = i
-}
-
-func (c *CustomDatum) CheckTargeting(targetData []types.TargetingData) bool {
 	var customData []*types.CustomData
-	for _, td := range targetData {
+	for _, td := range targetData.([]types.TargetingData) {
 		if td.Data.DataType() != types.DataTypeCustom {
 			continue
 		}
@@ -149,6 +122,43 @@ func (c *CustomDatum) CheckTargeting(targetData []types.TargetingData) bool {
 		if err == nil {
 			return !val
 		}
+	case types.OperatorIsAmongValues:
+		regexpAmongValues := regexp.MustCompile("\"([^\"]*)\"")
+		allMatches := regexpAmongValues.FindAllString(c.Value.(string), -1)
+		allMatches = utils.Map(allMatches, func(element string) string {
+			return strings.Trim(element, "\"")
+		})
+		return utils.Contains(allMatches, customDatum.Value.(string))
 	}
 	return false
+}
+
+func (c *CustomDatum) String() string {
+	if c == nil {
+		return ""
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		return ""
+	}
+	var s strings.Builder
+	s.Grow(len(b))
+	s.Write(b)
+	return s.String()
+}
+
+func (c CustomDatum) GetType() types.TargetingType {
+	return c.Type
+}
+
+func (c *CustomDatum) SetType(t types.TargetingType) {
+	c.Type = t
+}
+
+func (c CustomDatum) GetInclude() bool {
+	return c.Include
+}
+
+func (c *CustomDatum) SetInclude(i bool) {
+	c.Include = i
 }

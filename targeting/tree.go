@@ -8,6 +8,8 @@ import (
 	"github.com/Kameleoon/client-go/types"
 )
 
+type GetTargetingData func(types.TargetingType) interface{}
+
 type Tree struct {
 	LeftTree   *Tree
 	RightTree  *Tree
@@ -49,7 +51,7 @@ func (t *Tree) String() string {
 	return t.StringPadding(0)
 }
 
-func (t *Tree) CheckTargeting(data []types.TargetingData) bool {
+func (t *Tree) CheckTargeting(data GetTargetingData) bool {
 	if t.Condition != nil {
 		return t.checkCondition(data)
 	}
@@ -74,8 +76,8 @@ func (t *Tree) CheckTargeting(data []types.TargetingData) bool {
 	return leftTargeted && rightTargeted
 }
 
-func (t *Tree) checkCondition(data []types.TargetingData) bool {
-	targeted := t.Condition.CheckTargeting(data)
+func (t *Tree) checkCondition(data GetTargetingData) bool {
+	targeted := t.Condition.CheckTargeting(data(t.Condition.GetType()))
 	if !t.Condition.GetInclude() {
 		targeted = !targeted
 	}
@@ -170,6 +172,10 @@ func getCondition(c types.TargetingCondition) types.Condition {
 	switch c.GetType() {
 	case types.TargetingCustomDatum:
 		return conditions.NewCustomDatum(c)
+	case types.TargetingTargetExperiment:
+		return conditions.NewTargetExperiment(c)
+	case types.TargetingExclusiveExperiment:
+		return conditions.NewExclusiveExperiment(c)
 	}
 	return nil
 }

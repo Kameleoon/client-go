@@ -13,9 +13,8 @@ const (
 	DefaultConfigUpdateInterval = time.Hour
 	DefaultRequestTimeout       = 2 * time.Second
 	DefaultVisitorDataMaxSize   = 500 // 500 mb
-	DefaultTrackingVersion      = "sdk/go/" + SDKVersion
-	UserAgent                   = "kameleoon-client-go/"
-	DefaultEnvironment          = "production"
+	UserAgent                   = "sdk/go/"
+	DefaultEnvironment          = ""
 )
 
 type Config struct {
@@ -23,7 +22,6 @@ type Config struct {
 	Logger               Logger        `yml:"-" yaml:"-"`
 	SiteCode             string        `yml:"site_code" yaml:"site_code"`
 	TrackingURL          string        `yml:"tracking_url" yaml:"tracking_url" default:"https://api-ssx.kameleoon.com"`
-	TrackingVersion      string        `yml:"tracking_version" yaml:"tracking_version"`
 	ProxyURL             string        `yml:"proxy_url" yaml:"proxy_url"`
 	ClientID             string        `yml:"client_id" yaml:"client_id"`
 	ClientSecret         string        `yml:"client_secret" yaml:"client_secret"`
@@ -31,7 +29,6 @@ type Config struct {
 	ConfigUpdateInterval time.Duration `yml:"config_update_interval" yaml:"config_update_interval" default:"1h"`
 	Timeout              time.Duration `yml:"timeout" yaml:"timeout" default:"2s"`
 	VisitorDataMaxSize   int           `yml:"visitor_data_max_size" yaml:"visitor_data_max_size"`
-	BlockingMode         bool          `yml:"blocking_mode" yaml:"blocking_mode"`
 	VerboseMode          bool          `yml:"verbose_mode" yaml:"verbose_mode"`
 	Environment          string        `yml:"environment" yaml:"environment"`
 }
@@ -59,9 +56,6 @@ func (c *Config) defaults() {
 	}
 	if len(c.Version) == 0 {
 		c.Version = SDKVersion
-	}
-	if len(c.TrackingVersion) == 0 {
-		c.TrackingVersion = DefaultTrackingVersion
 	}
 	if len(c.Environment) == 0 {
 		c.Environment = DefaultEnvironment
@@ -104,7 +98,7 @@ const (
 
 type NetworkConfig struct {
 	ProxyURL        string
-	UserAgent       string
+	KameleoonClient string
 	DoTimeout       time.Duration
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
@@ -115,7 +109,7 @@ func (c *NetworkConfig) defaults(version string) {
 	var b strings.Builder
 	b.WriteString(UserAgent)
 	b.WriteString(version)
-	c.UserAgent = b.String()
+	c.KameleoonClient = b.String()
 
 	if c.ReadTimeout == 0 {
 		c.ReadTimeout = DefaultReadTimeout

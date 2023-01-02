@@ -1,7 +1,7 @@
 package types
 
 type Segment struct {
-	ID                       int             `json:"id"`
+	ID                       int             `json:"id,string"`
 	Name                     string          `json:"name"`
 	Description              string          `json:"description"`
 	ConditionsData           *ConditionsData `json:"conditionsData"`
@@ -16,9 +16,4 @@ type Segment struct {
 	PersonalizationAmount    int             `json:"personalizationAmount,omitempty"`
 	ExperimentIds            []string        `json:"experiments,omitempty"`
 	PersonalizationIds       []string        `json:"personalizations,omitempty"`
-}
-
-type SegmentQL struct {
-	ID int `json:"id,string"`
-	Segment
 }

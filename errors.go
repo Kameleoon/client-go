@@ -109,16 +109,16 @@ func (e ErrNotTargeted) Error() string {
 	return "visitor " + e.Message + " is not targeted"
 }
 
-type ErrNotActivated struct {
+type ErrNotAllocated struct {
 	APIError
 }
 
-func newErrNotActivated(msg string) error {
-	return &ErrNotActivated{APIError{Message: msg}}
+func newErrNotAllocated(msg string) error {
+	return &ErrNotAllocated{APIError{Message: msg}}
 }
 
-func (e ErrNotActivated) Error() string {
-	return "visitor " + e.Message + " is not activated"
+func (e ErrNotAllocated) Error() string {
+	return "visitor " + e.Message + " is not allocated"
 }
 
 type ErrVisitorCodeNotValid struct {

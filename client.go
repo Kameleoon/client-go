@@ -1,10 +1,7 @@
 package kameleoon
 
 import (
-	"fmt"
 	"net/url"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,40 +10,48 @@ import (
 	"github.com/segmentio/encoding/json"
 	"github.com/valyala/fasthttp"
 
-	"github.com/Kameleoon/client-go/targeting"
+	"github.com/Kameleoon/client-go/configuration"
+	"github.com/Kameleoon/client-go/storage"
 	"github.com/Kameleoon/client-go/types"
 	"github.com/Kameleoon/client-go/utils"
 )
 
-const SDKVersion = "1.0.6"
+const SDKVersion = "2.0.0"
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
 	API_OAUTH                     = "https://api.kameleoon.com/oauth/token"
 	API_SSX_URL                   = "https://api-ssx.kameleoon.com"
 	API_DATA_URL                  = "https://api-data.kameleoon.com"
-	REFERENCE                     = "0"
+	API_CLIENT_CONFIG_URL         = "https://client-config.kameleoon.com"
+	REFERENCE                     = 0
 	KAMELEOON_VISITOR_CODE_LENGTH = 255
+	USER_AGENT_MAX_COUNT          = 50000
 )
 
 type Client struct {
-	Data    *hashmap.HashMap
-	Cfg     *Config
-	network networkClient
+	Data             *hashmap.HashMap
+	Cfg              *Config
+	network          networkClient
+	variationStorage *storage.VariationStorage
 
-	m            sync.Mutex
-	init         bool
-	initError    error
-	token        string
-	experiments  []types.Experiment
-	featureFlags []types.FeatureFlag
+	m           sync.Mutex
+	init        bool
+	initError   error
+	token       string
+	experiments []configuration.Experiment
+	// featureFlags   []configuration.FeatureFlag
+	featureFlagsV2 []configuration.FeatureFlagV2
+	userAgents     map[string]types.UserAgent
 }
 
 func NewClient(cfg *Config) *Client {
 	c := &Client{
-		Cfg:     cfg,
-		network: newNetworkClient(&cfg.Network),
-		Data:    new(hashmap.HashMap),
+		Cfg:              cfg,
+		network:          newNetworkClient(&cfg.Network),
+		variationStorage: storage.NewVariationStorage(),
+		Data:             new(hashmap.HashMap),
+		userAgents:       make(map[string]types.UserAgent),
 	}
 	go c.updateConfig()
 	return c
@@ -82,8 +87,9 @@ func (c *Client) RunWhenReady(cb func(c *Client, err error)) {
 // You have to make sure that proper error handling is set up in your code as shown in the example to the right to
 // catch potential exceptions.
 //
-// returns ExperimentConfigurationNotFound error when experiment configuration is not found
-// returns NotActivated error when visitor triggered the experiment, but did not activate it.
+// returns ErrFeatureConfigNotFound error when experiment configuration is not found
+// returns ErrNotAllocated error when visitor triggered the experiment, but did not activate it.
+// returns ErrVisitorCodeNotValid error when visitor code is not valid
 // Usually, this happens because the user has been associated with excluded traffic
 // returns NotTargeted error when visitor is not targeted by the experiment, as the associated targeting segment conditions were not fulfilled.
 // He should see the reference variation
@@ -91,15 +97,12 @@ func (c *Client) TriggerExperiment(visitorCode string, experimentID int) (int, e
 	return c.triggerExperiment(visitorCode, experimentID)
 }
 
-func (c *Client) TriggerExperimentTimeout(visitorCode string, experimentID int, timeout time.Duration) (int, error) {
-	return c.triggerExperiment(visitorCode, experimentID, timeout)
-}
-
-func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout ...time.Duration) (int, error) {
+func (c *Client) triggerExperiment(visitorCode string, experimentID int) (int, error) {
 	if _, err := c.validateVisitorCode(visitorCode); err != nil {
 		return -1, err
 	}
-	var ex types.Experiment
+
+	var ex configuration.Experiment
 	c.m.Lock()
 	for i, e := range c.experiments {
 		if e.ID == experimentID {
@@ -116,90 +119,47 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 		Type:         TrackingRequestExperiment,
 		VisitorCode:  visitorCode,
 		ExperimentID: ex.ID,
-	}
-	if !c.Cfg.BlockingMode {
-		if !isSiteCodeEnable(ex.Site) {
-			return -1, newSiteCodeDisabled(c.Cfg.SiteCode)
-		}
-		var data []types.TargetingData
-		if cell := c.getDataCell(visitorCode); cell != nil {
-			data = cell.Data
-		}
-		segment, ok := ex.TargetingSegment.(*targeting.Segment)
-		if ok && !segment.CheckTargeting(data) {
-			return -1, newErrNotTargeted(visitorCode)
-		}
-
-		threshold := getHashDouble(ex.ID, visitorCode, ex.RespoolTime)
-		keys := make([]int, 0, len(ex.Deviations))
-		for k := range ex.Deviations {
-			keyInt, _ := strconv.Atoi(k)
-			keys = append(keys, keyInt)
-		}
-		sort.Ints(keys)
-		for _, kInt := range keys {
-			k := strconv.Itoa(kInt)
-			v := ex.Deviations[k]
-			threshold -= v
-			if threshold >= 0 {
-				continue
-			}
-			req.VariationID = k
-			go c.postTrackingAsync(req)
-			return utils.ParseUint(k)
-		}
-
-		req.VariationID = REFERENCE
-		req.NoneVariation = true
-		go c.postTrackingAsync(req)
-		return -1, newErrNotActivated(visitorCode)
+		UserAgent:    c.getUserAgent(visitorCode),
 	}
 
-	data := c.selectSendData()
-	var sb strings.Builder
-	for _, dataCell := range data {
-		for i := 0; i < len(dataCell.Data); i++ {
-			if _, exist := dataCell.Index[i]; exist {
-				continue
-			}
-			sb.WriteString(dataCell.Data[i].QueryEncode())
-			sb.WriteByte('\n')
-		}
-	}
-
-	r := request{
-		URL:          c.buildTrackingPath(c.Cfg.TrackingURL, req),
-		Method:       MethodPost,
-		ContentType:  HeaderContentTypeText,
-		ClientHeader: c.Cfg.TrackingVersion,
-	}
-	if len(timeout) > 0 {
-		r.Timeout = timeout[0]
-	}
-	var id string
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		if resp.StatusCode() >= fasthttp.StatusBadRequest {
-			return ErrBadStatus
-		}
-		id = string(resp.Body())
-		return err
-	}
-	c.log("Trigger experiment request: %v", r)
-	if err := c.network.Do(r, cb); err != nil {
-		c.log("Failed to trigger experiment: %v", err)
+	if err := c.checkSiteCodeEnable(&ex); err != nil {
 		return -1, err
 	}
-	switch id {
-	case "", "null":
+	if !c.checkTargeting(visitorCode, ex.ID, &ex) {
 		return -1, newErrNotTargeted(visitorCode)
-	case "0":
-		return -1, newErrNotActivated(visitorCode)
 	}
 
-	return utils.ParseUint(id)
+	variationId := REFERENCE
+	noneVariation := true
+	if savedVariationId, exist := c.getValidSavedVariation(visitorCode, &ex); exist {
+		variationId = savedVariationId
+		noneVariation = false
+	} else {
+		calculatedVariationId := c.getVariationForExperiment(ex, visitorCode)
+		if calculatedVariationId != nil {
+			variationId = *calculatedVariationId
+			noneVariation = false
+			c.variationStorage.UpdateVariation(visitorCode, experimentID, variationId)
+		}
+	}
+	req.VariationID = variationId
+	req.NoneVariation = noneVariation
+	go c.postTrackingAsync(req)
+	if noneVariation {
+		return -1, newErrNotAllocated(visitorCode)
+	}
+	return variationId, nil
+}
+
+func (c *Client) getVariationForExperiment(exp configuration.Experiment, visitorCode string) *int {
+	threshold := getHashDouble(visitorCode, exp.ID, exp.RespoolTime)
+	for _, deviation := range exp.Deviations {
+		threshold -= deviation.Value
+		if threshold < 0 {
+			return &deviation.VariationId
+		}
+	}
+	return nil
 }
 
 // AddData associate various Data to a visitor.
@@ -208,12 +168,20 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int, timeout
 // Kameleoon back-end servers by itself. Instead, the declared data is saved for future sending via the flush method.
 // This reduces the number of server calls made, as data is usually grouped into a single server call triggered by
 // the execution of the flush method.
-func (c *Client) AddData(visitorCode string, data ...types.Data) error {
+func (c *Client) AddData(visitorCode string, allData ...types.Data) error {
 	// TODO think about memory size and c.Cfg.VisitorDataMaxSize
 	//var stats runtime.MemStats
 	//runtime.ReadMemStats(&stats))
 	if _, err := c.validateVisitorCode(visitorCode); err != nil {
 		return err
+	}
+	data := make([]types.Data, 0, len(allData))
+	for _, element := range allData {
+		if ua, ok := element.(*types.UserAgent); ok {
+			c.addUserAgent(visitorCode, ua)
+		} else {
+			data = append(data, element)
+		}
 	}
 	t := time.Now()
 	td := make([]types.TargetingData, len(data))
@@ -295,14 +263,17 @@ func (c *Client) FlushVisitor(visitorCode string) error {
 	go c.postTrackingAsync(trackingRequest{
 		Type:        TrackingRequestData,
 		VisitorCode: visitorCode,
+		UserAgent:   c.getUserAgent(visitorCode),
 	})
 	return nil
 }
 
 func (c *Client) FlushAll() {
-	go c.postTrackingAsync(trackingRequest{
-		Type: TrackingRequestData,
-	})
+	for kv := range c.Data.Iter() {
+		if visitorCode, ok := kv.Key.(string); ok {
+			c.FlushVisitor(visitorCode)
+		}
+	}
 }
 
 // GetVariationAssociatedData returns JSON Data associated with a variation.
@@ -327,6 +298,7 @@ func (c *Client) GetVariationAssociatedData(variationID int) ([]byte, error) {
 	return nil, newErrVariationNotFound(utils.WriteUint(variationID))
 }
 
+// REMOVE LATER
 // ActivateFeature activates a feature toggle.
 //
 // This method takes a visitorCode and feature_key (or featureID) as mandatory arguments to check
@@ -336,160 +308,248 @@ func (c *Client) GetVariationAssociatedData(variationID int) ([]byte, error) {
 // If a user with a given visitorCode is already registered with this feature flag, it will detect the previous featureFlag value.
 // You have to make sure that proper error handling is set up in your code as shown in the example to the right to catch potential exceptions.
 //
-// returns FeatureConfigurationNotFound error
-// returns NotTargeted error
-func (c *Client) ActivateFeature(visitorCode string, featureKey interface{}) (bool, error) {
-	return c.activateFeature(visitorCode, featureKey)
+// returns ErrFeatureConfigNotFound error
+// returns ErrNotTargeted error
+// returns ErrVisitorCodeNotValid error
+// func (c *Client) ActivateFeature(visitorCode string, featureKey interface{}) (bool, error) {
+// 	return c.activateFeature(visitorCode, featureKey)
+// }
+
+// func (c *Client) activateFeature(visitorCode string, featureKey interface{}) (bool, error) {
+// 	if _, err := c.validateVisitorCode(visitorCode); err != nil {
+// 		return false, err
+// 	}
+// 	ff, err := c.findFeatureFlag(featureKey)
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	req := trackingRequest{
+// 		Type:         TrackingRequestExperiment,
+// 		VisitorCode:  visitorCode,
+// 		ExperimentID: ff.ID,
+// 		UserAgent:    c.getUserAgent(visitorCode),
+// 	}
+// 	if err := c.checkSiteCodeEnable(&ff); err != nil {
+// 		return false, err
+// 	}
+
+// 	if !c.checkTargeting(visitorCode, ff.ID, ff) {
+// 		return false, newErrNotTargeted(visitorCode)
+// 	}
+
+// 	if !ff.IsScheduleActive() {
+// 		return false, nil
+// 	}
+
+// 	threshold := getHashDouble(visitorCode, ff.ID, nil)
+// 	if threshold >= 1-ff.ExpositionRate {
+// 		if len(ff.Variations) > 0 {
+// 			req.VariationID = ff.Variations[0].ID
+// 		}
+// 		go c.postTrackingAsync(req)
+// 		return true, nil
+// 	}
+// 	req.VariationID = REFERENCE
+// 	req.NoneVariation = true
+// 	go c.postTrackingAsync(req)
+// 	return false, nil
+// }
+
+// GetFeatureVariationKey returns a variation key for visitor code
+//
+// This method takes a visitorCode and featureKey as mandatory arguments and
+// returns a variation assigned for a given visitor
+// If such a user has never been associated with any feature flag rules, the SDK returns a default variation key
+// You have to make sure that proper error handling is set up in your code as shown in the example to the right to catch potential exceptions.
+//
+// returns ErrFeatureConfigNotFound error
+// returns ErrVisitorCodeNotValid
+func (c *Client) GetFeatureVariationKey(visitorCode string, featureKey string) (string, error) {
+	_, variationKey, err := c.getFeatureVariationKey(visitorCode, featureKey)
+	return variationKey, err
 }
 
-func (c *Client) ActivateFeatureTimeout(visitorCode string, featureKey interface{}, timeout time.Duration) (bool, error) {
-	return c.activateFeature(visitorCode, featureKey, timeout)
-}
-
-func (c *Client) activateFeature(visitorCode string, featureKey interface{}, timeout ...time.Duration) (bool, error) {
-	if _, err := c.validateVisitorCode(visitorCode); err != nil {
-		return false, err
+// getFeatureVariationKey is a helper method for getting variation key for feature flag
+func (c *Client) getFeatureVariationKey(visitorCode string, featureKey string) (*configuration.FeatureFlagV2, string, error) {
+	if _, err := c.validateVisitorCode(visitorCode); err != nil { // validate that visitor code is acceptable else throw VisitorCodeNotValid exception
+		return nil, string(types.VARIATION_OFF), err
 	}
-	ff, err := c.getFeatureFlag(featureKey)
+	featureFlag, err := c.findFeatureFlagV2(featureKey) //find feature flag else throw ErrFeatureConfigNotFound error
 	if err != nil {
-		return false, err
+		return nil, string(types.VARIATION_OFF), err
 	}
-	req := trackingRequest{
-		Type:         TrackingRequestExperiment,
-		VisitorCode:  visitorCode,
-		ExperimentID: ff.ID,
+	variationKey, rule := c.calculateVariationKeyForFeature(&featureFlag, visitorCode)
+	if rule != nil && rule.Type == string(types.RuleTypeExperimentation) { //send tracking request if rule is type of EXPERIMENTATION
+		c.sendTrackingRequest(visitorCode, variationKey, rule)
 	}
-	if !c.Cfg.BlockingMode {
-		if !isSiteCodeEnable(ff.Site) {
-			return false, newSiteCodeDisabled(c.Cfg.SiteCode)
-		}
-		var data []types.TargetingData
-		if cell := c.getDataCell(visitorCode); cell != nil {
-			data = cell.Data
-		}
-
-		segment, ok := ff.TargetingSegment.(*targeting.Segment)
-		if ok && !segment.CheckTargeting(data) {
-			return false, newErrNotTargeted(visitorCode)
-		}
-
-		if !ff.IsScheduleActive() {
-			return false, nil
-		}
-
-		threshold := getHashDouble(ff.ID, visitorCode, nil)
-		if threshold >= 1-ff.ExpositionRate {
-			if len(ff.VariationsID) > 0 {
-				req.VariationID = utils.WriteUint(ff.VariationsID[0])
-			}
-			go c.postTrackingAsync(req)
-			return true, nil
-		}
-		req.VariationID = REFERENCE
-		req.NoneVariation = true
-		go c.postTrackingAsync(req)
-		return false, nil
-	}
-
-	data := c.selectSendData()
-	var sb strings.Builder
-	for _, dataCell := range data {
-		for i := 0; i < len(dataCell.Data); i++ {
-			if _, exist := dataCell.Index[i]; exist {
-				continue
-			}
-			sb.WriteString(dataCell.Data[i].QueryEncode())
-			sb.WriteByte('\n')
-		}
-	}
-	r := request{
-		URL:          c.buildTrackingPath(c.Cfg.TrackingURL, req),
-		Method:       MethodPost,
-		ContentType:  HeaderContentTypeText,
-		ClientHeader: c.Cfg.TrackingVersion,
-	}
-	if len(timeout) > 0 {
-		r.Timeout = timeout[0]
-	}
-	var result string
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		if resp.StatusCode() >= fasthttp.StatusBadRequest {
-			return ErrBadStatus
-		}
-		result = string(resp.Body())
-		return err
-	}
-	c.log("Activate feature request: %v", r)
-	if err = c.network.Do(r, cb); err != nil {
-		c.log("Failed to get activation: %v", err)
-		return false, err
-	}
-	switch result {
-	case "", "null":
-		return false, newErrFeatureConfigNotFound(visitorCode)
-	}
-	return true, nil
+	return &featureFlag, variationKey, nil
 }
 
-// GetFeatureVariable retrieves a feature variable.
+// getVariationKeyForFeatureFlag is a helper method for calculate variation key for feature flag
+func (c *Client) calculateVariationKeyForFeature(featureFlag *configuration.FeatureFlagV2, visitorCode string) (string, *configuration.Rule) {
+	if len(featureFlag.Rules) > 0 { // no rules -> return DefaultVariationKey
+		hashRule := getHashDoubleV2(visitorCode, featureFlag.ID, "")               //uses for rule exposition
+		hashVariation := getHashDoubleV2(visitorCode, featureFlag.ID, "variation") //uses for variation's expositions
+		for _, rule := range featureFlag.Rules {
+			if c.checkTargeting(visitorCode, featureFlag.ID, &rule) { //check if visitor is targeted for rule, else next rule
+				if hashRule < rule.Exposition { //check main expostion for rule with hashRule
+					variationKey := rule.GetVariationKey(hashVariation) // get variation key with new hashVariation
+					if variationKey != nil {                            // variationKey can be nil for experiment rules only, for targeted rule will be always true
+						return *variationKey, &rule
+					}
+				} else if rule.Type == string(types.RuleTypeTargetedDelivery) { //if visitor is targeted for targeted rule then break cycle -> return default
+					break
+				}
+			}
+		}
+	}
+	return featureFlag.DefaultVariationKey, nil
+}
+
+// sendTrackingRequest is a helper method for sending tracking requests for new FF v2
+func (c *Client) sendTrackingRequest(visitorCode string, variationKey string, rule *configuration.Rule) {
+	if rule.ExperimentID != nil {
+		req := trackingRequest{
+			Type:         TrackingRequestExperiment,
+			VisitorCode:  visitorCode,
+			ExperimentID: *rule.ExperimentID,
+			UserAgent:    c.getUserAgent(visitorCode),
+			VariationID:  *rule.GetVariationIdByKey(variationKey),
+		}
+		go c.postTrackingAsync(req)
+	} else {
+		c.log("An attempt to send a request with null experimentId was blocked")
+	}
+}
+
+// GetFeatureVariable retrieves a feature variable value from assigned for visitor variation
+//
+// A feature variable can be changed easily via our web application.
+//
+// returns ErrFeatureConfigNotFound error
+// returns ErrVisitorCodeNotValid
+// returns ErrFeatureVariableNotFound error
+// returns ErrVariationNotFound error
+func (c *Client) GetFeatureVariable(visitorCode string, featureKey string, variableName string) (interface{}, error) {
+	featureFlag, variationKey, err := c.getFeatureVariationKey(visitorCode, featureKey)
+	if err != nil {
+		return nil, err
+	}
+	variation, exist := featureFlag.GetVariationByKey(variationKey)
+	if !exist {
+		return nil, newErrVariationNotFound(featureKey)
+	}
+	variable, exist := variation.GetVariableByKey(variableName)
+	if !exist {
+		return nil, newErrFeatureVariableNotFound(variableName)
+	}
+	return parseFeatureVariableV2(variable), nil
+}
+
+// IsFeatureActive checks if feature is active for a visitor or not
+// (returns true / false instead of variation key)
+// This method takes a visitorCode and featureKey as mandatory arguments to check
+// if the specified feature will be active for a given user.
+// If such a user has never been associated with this feature flag, the SDK returns a boolean value randomly
+// (true if the user should have this feature or false if not).
+// You have to make sure that proper error handling is set up in your code as shown in the example to the right to catch potential exceptions.
+//
+// returns ErrFeatureConfigNotFound error
+// returns ErrVisitorCodeNotValid
+func (c *Client) IsFeatureActive(visitorCode string, featureKey string) (bool, error) {
+	variationKey, err := c.GetFeatureVariationKey(visitorCode, featureKey)
+	return variationKey != string(types.VARIATION_OFF), err
+}
+
+// GetFeatureAllVariables retrieves all feature variable values
+//
+// This method takes a featureKey and variationKey as mandatory arguments and
+// returns a variation assigned for a given visitor
+// A feature variable can be changed easily via our web application.
+//
+// returns ErrFeatureConfigNotFound error
+// returns ErrVariationNotFound error
+func (c *Client) GetFeatureAllVariables(featureKey string, variationKey string) (map[string]interface{}, error) {
+	featureFlag, err := c.findFeatureFlagV2(featureKey) //find feature flag else throw ErrFeatureConfigNotFound error
+	if err != nil {
+		return nil, newErrFeatureConfigNotFound(featureKey)
+	}
+	variation, exist := featureFlag.GetVariationByKey(variationKey)
+	if !exist {
+		return nil, newErrVariationNotFound(featureKey)
+	}
+	mapVariableValues := make(map[string]interface{})
+	for _, variable := range variation.Variables {
+		mapVariableValues[variable.Key] = parseFeatureVariableV2(&variable)
+	}
+	return mapVariableValues, nil
+}
+
+func parseFeatureVariableV2(variable *types.Variable) interface{} {
+	var value interface{}
+	switch variable.Type {
+	case "JSON":
+		if valueString, ok := variable.Value.(string); ok {
+			if err := json.Unmarshal([]byte(valueString), &value); err != nil {
+				value = nil
+			}
+		}
+	default:
+		value = variable.Value
+	}
+	return value
+}
+
+// ObtainFeatureVariable retrieves a feature variable.
 //
 // A feature variable can be changed easily via our web application.
 //
 // returns FeatureConfigurationNotFound error
 // returns FeatureVariableNotFound error
-func (c *Client) GetFeatureVariable(featureKey interface{}, variableKey string) (interface{}, error) {
-	ff, err := c.getFeatureFlag(featureKey)
-	if err != nil {
-		return nil, err
-	}
-	var customJson interface{}
-	for _, v := range ff.Variations {
-		cj := make(map[string]interface{})
+// func (c *Client) ObtainFeatureVariable(featureKey interface{}, variableKey string) (interface{}, error) {
+// 	ff, err := c.findFeatureFlag(featureKey)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	var customJson interface{}
+// 	for _, v := range ff.Variations {
+// 		cj := make(map[string]interface{})
 
-		stringData := string(v.CustomJson[:])
-		stringData = strings.ReplaceAll(stringData, "\\\\\\", "KameleoonTmpSymbol")
-		stringData = strings.ReplaceAll(stringData, "\\", "")
-		stringData = strings.ReplaceAll(stringData, "KameleoonTmpSymbol", "\\")
-		stringData = stringData[1 : len(stringData)-1]
+// 		stringData := string(v.CustomJson[:])
+// 		stringData = strings.ReplaceAll(stringData, "\\\\\\", "KameleoonTmpSymbol")
+// 		stringData = strings.ReplaceAll(stringData, "\\", "")
+// 		stringData = strings.ReplaceAll(stringData, "KameleoonTmpSymbol", "\\")
+// 		stringData = stringData[1 : len(stringData)-1]
 
-		if err = json.Unmarshal([]byte(stringData), &cj); err != nil {
-			continue
-		}
-		if val, exist := cj[variableKey]; exist {
-			customJson = val
-		}
-	}
-	if customJson == nil {
-		return nil, newErrFeatureVariableNotFound("Feature variable not found")
-	}
-	return parseFeatureVariable(customJson), nil
-}
+// 		if err = json.Unmarshal([]byte(stringData), &cj); err != nil {
+// 			continue
+// 		}
+// 		if val, exist := cj[variableKey]; exist {
+// 			customJson = val
+// 		}
+// 	}
+// 	if customJson == nil {
+// 		return nil, newErrFeatureVariableNotFound("Feature variable not found")
+// 	}
+// 	return parseFeatureVariable(customJson), nil
+// }
 
-func parseFeatureVariable(customJson interface{}) interface{} {
-	var value interface{}
-	if mapInterface, ok := customJson.(map[string]interface{}); ok {
-		switch mapInterface["type"] {
-		case "Boolean":
-			value, _ = strconv.ParseBool(mapInterface["value"].(string))
-		case "Number":
-			value, _ = strconv.Atoi(mapInterface["value"].(string))
-		case "String":
-			value = mapInterface["value"]
-		case "JSON":
-			if valueString, ok := mapInterface["value"].(string); ok {
-				if err := json.Unmarshal([]byte(valueString), &value); err != nil {
-					value = nil
-				}
-			}
-		default:
-			value = nil
-		}
-	}
-	return value
-}
+// func parseFeatureVariable(customJson interface{}) interface{} {
+// 	var value interface{}
+// 	if mapInterface, ok := customJson.(map[string]interface{}); ok {
+// 		switch mapInterface["type"] {
+// 		case "JSON":
+// 			if valueString, ok := mapInterface["value"].(string); ok {
+// 				if err := json.Unmarshal([]byte(valueString), &value); err != nil {
+// 					value = nil
+// 				}
+// 			}
+// 		default:
+// 			value = mapInterface["value"]
+// 		}
+// 	}
+// 	return value
+// }
 
 // The RetrieveDataFromRemoteSource method allows you to retrieve data (according to a key passed as
 // argument)stored on a remote Kameleoon server. Usually data will be stored on our remote servers
@@ -503,7 +563,7 @@ func (c *Client) RetrieveDataFromRemoteSource(key string, timeout ...time.Durati
 		URL:          c.buildAPIDataPath(key),
 		Method:       MethodGet,
 		ContentType:  HeaderContentTypeJson,
-		ClientHeader: c.Cfg.TrackingVersion,
+		ClientHeader: c.Cfg.Network.KameleoonClient,
 	}
 	if len(timeout) > 0 {
 		r.Timeout = timeout[0]
@@ -540,65 +600,77 @@ func (c *Client) buildAPIDataPath(key string) string {
 	return url.String()
 }
 
-func (c *Client) getFeatureFlag(featureKey interface{}) (types.FeatureFlag, error) {
-	var flag types.FeatureFlag
+// func (c *Client) findFeatureFlag(featureKey interface{}) (configuration.FeatureFlag, error) {
+// 	var flag configuration.FeatureFlag
 
+// 	c.m.Lock()
+// 	switch key := featureKey.(type) {
+// 	case string:
+// 		for i, featureFlag := range c.featureFlags {
+// 			if featureFlag.IdentificationKey == key {
+// 				flag = featureFlag
+// 				break
+// 			}
+// 			if i == len(c.featureFlags)-1 {
+// 				c.m.Unlock()
+// 				return flag, newErrFeatureConfigNotFound(key)
+// 			}
+// 		}
+// 	case int:
+// 		for i, featureFlag := range c.featureFlags {
+// 			if featureFlag.ID == key {
+// 				flag = featureFlag
+// 				break
+// 			}
+// 			if i == len(c.featureFlags)-1 {
+// 				c.m.Unlock()
+// 				return flag, newErrFeatureConfigNotFound(strconv.Itoa(key))
+// 			}
+// 		}
+// 	default:
+// 		c.m.Unlock()
+// 		return flag, ErrInvalidFeatureKeyType
+// 	}
+// 	c.m.Unlock()
+
+// 	return flag, nil
+// }
+
+func (c *Client) findFeatureFlagV2(featureKey string) (configuration.FeatureFlagV2, error) {
+	var flag configuration.FeatureFlagV2
 	c.m.Lock()
-	switch key := featureKey.(type) {
-	case string:
-		for i, featureFlag := range c.featureFlags {
-			if featureFlag.IdentificationKey == key {
-				flag = featureFlag
-				break
-			}
-			if i == len(c.featureFlags)-1 {
-				c.m.Unlock()
-				return flag, newErrFeatureConfigNotFound(key)
-			}
-		}
-	case int:
-		for i, featureFlag := range c.featureFlags {
-			if featureFlag.ID == key {
-				flag = featureFlag
-				break
-			}
-			if i == len(c.featureFlags)-1 {
-				c.m.Unlock()
-				return flag, newErrFeatureConfigNotFound(strconv.Itoa(key))
-			}
-		}
-	default:
-		c.m.Unlock()
-		return flag, ErrInvalidFeatureKeyType
-	}
-	c.m.Unlock()
-
-	return flag, nil
-}
-
-func (c *Client) GetExperiment(id int) *types.Experiment {
-	c.m.Lock()
-	for i, ex := range c.experiments {
-		if ex.ID == id {
-			c.m.Unlock()
-			return &c.experiments[i]
-		}
-	}
-	c.m.Unlock()
-	return nil
-}
-
-func (c *Client) GetFeatureFlag(id int) *types.FeatureFlag {
-	c.m.Lock()
-	for i, ff := range c.featureFlags {
-		if ff.ID == id {
-			c.m.Unlock()
-			return &c.featureFlags[i]
+	defer c.m.Unlock()
+	for _, featureFlag := range c.featureFlagsV2 {
+		if featureFlag.FeatureKey == featureKey {
+			return featureFlag, nil
 		}
 	}
-	c.m.Unlock()
-	return nil
+	return flag, newErrFeatureConfigNotFound(featureKey)
 }
+
+// func (c *Client) GetExperiment(id int) *configuration.Experiment {
+// 	c.m.Lock()
+// 	for i, ex := range c.experiments {
+// 		if ex.ID == id {
+// 			c.m.Unlock()
+// 			return &c.experiments[i]
+// 		}
+// 	}
+// 	c.m.Unlock()
+// 	return nil
+// }
+
+// func (c *Client) GetFeatureFlag(id int) *configuration.FeatureFlag {
+// 	c.m.Lock()
+// 	for i, ff := range c.featureFlags {
+// 		if ff.ID == id {
+// 			c.m.Unlock()
+// 			return &c.featureFlags[i]
+// 		}
+// 	}
+// 	c.m.Unlock()
+// 	return nil
+// }
 
 func (c *Client) log(format string, args ...interface{}) {
 	if !c.Cfg.VerboseMode {
@@ -653,539 +725,209 @@ func (c *Client) updateConfig() {
 	c.init = true
 	c.initError = err
 	c.m.Unlock()
-	if err != nil {
-		c.log("Failed to fetch: %v", err)
-		return
-	}
 	ticker := time.NewTicker(c.Cfg.ConfigUpdateInterval)
 	c.log("Scheduled job to fetch configuration is starting")
 	for range ticker.C {
-		err = c.fetchConfig()
-		if err != nil {
-			c.log("Failed to fetch: %v", err)
-			return
-		}
+		c.fetchConfig()
 	}
 }
 
 func (c *Client) fetchConfig() error {
-	if err := c.fetchToken(); err != nil {
-		return err
-	}
-	// Rest API
-	// siteID, err := c.fetchSiteID()
-	// if err != nil {
+	// if err := c.fetchToken(); err != nil {
 	// 	return err
 	// }
-	// experiments, err := c.fetchExperiments(siteID)
-	// if err != nil {
-	// 	return err
-	// }
-	// featureFlags, err := c.fetchFeatureFlags(siteID)
 
-	//GraphQL
-	experiments, err := c.fetchExperimentsGraphQL(c.Cfg.SiteCode)
-	fmt.Println(experiments)
-	if err != nil {
+	if clientConfig, err := c.requestClientConfig(c.Cfg.SiteCode); err == nil {
+		c.m.Lock()
+		c.experiments = clientConfig.Experiments
+		// c.featureFlags = clientConfig.FeatureFlags
+		c.featureFlagsV2 = clientConfig.FeatureFlagsV2
+		c.m.Unlock()
+		return nil
+	} else {
+		c.log("Failed to fetch: %v", err)
 		return err
 	}
-	featureFlags, err := c.fetchFeatureFlagsGraphQL(c.Cfg.SiteCode)
+}
+
+func (c *Client) requestClientConfig(siteCode string) (configuration.Configuration, error) {
+	c.log("Fetching Configuration")
+	var campaigns configuration.Configuration
+	uri, err := c.buildFetchPathClientConfig(API_CLIENT_CONFIG_URL, c.Cfg.SiteCode, c.Cfg.Environment)
 	if err != nil {
-		return err
-	}
-
-	c.m.Lock()
-	c.experiments = append(c.experiments, experiments...)
-	c.featureFlags = append(c.featureFlags, featureFlags...)
-	c.m.Unlock()
-	return nil
-}
-
-func (c *Client) fetchSite() (*types.SiteResponse, error) {
-	c.log("Fetching site")
-	filter := []fetchFilter{{
-		Field:      "code",
-		Operator:   "EQUAL",
-		Parameters: []string{c.Cfg.SiteCode},
-	}}
-	res := []types.SiteResponse{{}}
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		b := resp.Body()
-		if len(b) == 0 {
-			return ErrEmptyResponse
-		}
-		if b[0] == '[' {
-			return json.Unmarshal(b, &res)
-		}
-		return json.Unmarshal(b, &res[0])
-	}
-	err := c.fetchOne("/sites", fetchQuery{PerPage: 1}, filter, cb)
-	if err != nil {
-		return nil, err
-	}
-	if len(res) == 0 {
-		return nil, ErrEmptyResponse
-	}
-	c.log("Sites are fetched: %v", res)
-	return &res[0], err
-}
-
-type siteResponseID struct {
-	ID int `json:"id"`
-}
-
-func (c *Client) fetchSiteID() (int, error) {
-	c.log("Fetching site id")
-	filter := []fetchFilter{{
-		Field:      "code",
-		Operator:   "EQUAL",
-		Parameters: []string{c.Cfg.SiteCode},
-	}}
-	res := []siteResponseID{{}}
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		b := resp.Body()
-		if len(b) == 0 {
-			return ErrEmptyResponse
-		}
-		if b[0] == '[' {
-			return json.Unmarshal(b, &res)
-		}
-		return json.Unmarshal(b, &res[0])
-	}
-	err := c.fetchOne("/sites", fetchQuery{PerPage: 1}, filter, cb)
-	if len(res) == 0 {
-		return -1, ErrEmptyResponse
-	}
-	c.log("Sites are fetched: %v", res)
-	return res[0].ID, err
-}
-
-func (c *Client) fetchExperimentsGraphQL(siteCode string, perPage ...int) ([]types.Experiment, error) {
-	c.log("Fetching experiments")
-	pp := -1
-	if len(perPage) > 0 {
-		pp = perPage[0]
-	}
-	var ex []types.Experiment
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		b := resp.Body()
-		if len(b) == 0 {
-			return ErrEmptyResponse
-		}
-		var res ExperimentDataGraphQL
-		fmt.Println(string(b))
-		err = json.Unmarshal(b, &res)
-		if err != nil {
-			fmt.Println(err)
-			return err
-		}
-		for _, expQL := range res.Data.Experiments.Edge {
-			ex = append(ex, expQL.Transform())
-		}
-		return nil
-	}
-	err := c.fetchAllGraphQL(GetExperimentsGraphQL(siteCode), fetchQuery{PerPage: pp}, cb)
-	c.log("Experiment are fetched: %v", ex)
-	return ex, err
-}
-
-func (c *Client) fetchExperiments(siteID int, perPage ...int) ([]types.Experiment, error) {
-	c.log("Fetching experiments")
-	pp := -1
-	if len(perPage) > 0 {
-		pp = perPage[0]
-	}
-	var ex []types.Experiment
-	filters := []fetchFilter{
-		{
-			Field:      "siteId",
-			Operator:   "EQUAL",
-			Parameters: []string{utils.WriteUint(siteID)},
-		},
-		{
-			Field:      "status",
-			Operator:   "IN",
-			Parameters: []string{"ACTIVE", "DEVIATED"},
-		},
-		{
-			Field:      "type",
-			Operator:   "IN",
-			Parameters: []string{string(types.ExperimentTypeServerSide), string(types.ExperimentTypeHybrid)},
-		},
-	}
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		b := resp.Body()
-		if len(b) == 0 {
-			return ErrEmptyResponse
-		}
-		res := []types.Experiment{{}}
-		if b[0] == '[' {
-			err = json.Unmarshal(b, &res)
-		} else {
-			err = json.Unmarshal(b, &res[0])
-		}
-		if err != nil {
-			return err
-		}
-		ex = append(ex, res...)
-		return nil
-	}
-	err := c.fetchAll("/experiments", fetchQuery{PerPage: pp}, filters, cb)
-	for i := 0; i < len(ex); i++ {
-		err = c.completeExperiment(&ex[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	c.log("Experiment are fetched: %v", ex)
-	return ex, err
-}
-
-func (c *Client) completeExperiment(e *types.Experiment) error {
-	for _, id := range e.VariationsID {
-		variation, err := c.fetchVariation(id)
-		if err != nil {
-			continue
-		}
-		e.Variations = append(e.Variations, variation)
-	}
-	if e.TargetingSegmentID > 0 {
-		segment, err := c.fetchSegment(e.TargetingSegmentID)
-		if err != nil {
-			return err
-		}
-		if segment.ID == 0 {
-			return newErrNotFound("segment id")
-		}
-		if segment.ConditionsData == nil {
-			return newErrNotFound("segment condition data")
-		}
-		e.TargetingSegment = targeting.NewSegment(segment)
-	}
-	return nil
-}
-
-func (c *Client) fetchVariation(id int) (types.Variation, error) {
-	v := types.Variation{}
-	var path strings.Builder
-	path.WriteString("/variations/")
-	path.WriteString(utils.WriteUint(id))
-	err := c.fetchOne(path.String(), fetchQuery{}, nil, respCallbackJson(&v))
-	return v, err
-}
-
-func (c *Client) fetchSegment(id int) (*types.Segment, error) {
-	s := &types.Segment{}
-
-	var path strings.Builder
-	path.WriteString("/segments/")
-	path.WriteString(utils.WriteUint(id))
-	err := c.fetchOne(path.String(), fetchQuery{}, nil, respCallbackJson(s))
-	return s, err
-}
-
-func (c *Client) fetchFeatureFlagsGraphQL(siteCode string, perPage ...int) ([]types.FeatureFlag, error) {
-	c.log("Fetching feature flags")
-	pp := -1
-	if len(perPage) > 0 {
-		pp = perPage[0]
-	}
-	var ff []types.FeatureFlag
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		b := resp.Body()
-		if len(b) == 0 {
-			return ErrEmptyResponse
-		}
-		var res FeatureFlagDataGraphQL
-		err = json.Unmarshal(b, &res)
-		if err != nil {
-			fmt.Println(err)
-			return err
-		}
-		for _, ffQL := range res.Data.FeatureFlags.Edge {
-			ff = append(ff, ffQL.Transform())
-		}
-		return nil
-	}
-
-	err := c.fetchAllGraphQL(GetFeatureFlagsGraphQL(siteCode, c.Cfg.Environment), fetchQuery{PerPage: pp}, cb)
-	c.log("Feature flags are fetched: %v", ff)
-	return ff, err
-}
-
-func (c *Client) fetchFeatureFlags(siteID int, perPage ...int) ([]types.FeatureFlag, error) {
-	c.log("Fetching feature flags")
-	pp := -1
-	if len(perPage) > 0 {
-		pp = perPage[0]
-	}
-	var ff []types.FeatureFlag
-	filters := []fetchFilter{
-		{
-			Field:      "siteId",
-			Operator:   "EQUAL",
-			Parameters: []string{utils.WriteUint(siteID)},
-		},
-		{
-			Field:      "status",
-			Operator:   "EQUAL",
-			Parameters: []string{"ACTIVE"},
-		},
-	}
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		b := resp.Body()
-		if len(b) == 0 {
-			return ErrEmptyResponse
-		}
-		fmt.Println(string(b))
-		res := []types.FeatureFlag{{}}
-		if b[0] == '[' {
-			err = json.Unmarshal(b, &res)
-		} else {
-			err = json.Unmarshal(b, &res[0])
-		}
-		if err != nil {
-			return err
-		}
-		ff = append(ff, res...)
-		return nil
-	}
-
-	err := c.fetchAll("/feature-flags", fetchQuery{PerPage: pp}, filters, cb)
-	for i := 0; i < len(ff); i++ {
-		err = c.completeFeatureFlag(&ff[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	c.log("Feature flags are fetched: %v", ff)
-	return ff, err
-}
-
-func (c *Client) completeFeatureFlag(ff *types.FeatureFlag) error {
-	for _, id := range ff.VariationsID {
-		variation, err := c.fetchVariation(id)
-		if err != nil {
-			continue
-		}
-		ff.Variations = append(ff.Variations, variation)
-	}
-	if ff.TargetingSegmentID > 0 {
-		segment, err := c.fetchSegment(ff.TargetingSegmentID)
-		if err != nil {
-			return err
-		}
-		if segment.ID == 0 {
-			return newErrNotFound("segment id")
-		}
-		if segment.ConditionsData == nil {
-			return newErrNotFound("segment condition Data")
-		}
-		ff.TargetingSegment = targeting.NewSegment(segment)
-	}
-	return nil
-}
-
-type fetchQuery struct {
-	PerPage int `url:"perPage,omitempty"`
-	Page    int `url:"page,omitempty"`
-}
-
-type fetchFilter struct {
-	Field      string      `json:"field"`
-	Operator   string      `json:"operator"`
-	Parameters interface{} `json:"parameters"`
-}
-
-func (c *Client) fetchAllGraphQL(queryQL string, q fetchQuery, cb respCallback) error {
-	currentPage := 1
-	lastPage := -1
-	iterator := func(resp *fasthttp.Response, err error) error {
-		if resp.StatusCode() >= fasthttp.StatusBadRequest {
-			return ErrBadStatus
-		}
-		var cbErr error
-		if cb != nil {
-			cbErr = cb(resp, err)
-		}
-		if lastPage < 0 {
-			count := resp.Header.Peek(HeaderPaginationCount)
-			lastPage, err = fasthttp.ParseUint(count)
-			return err
-		}
-		return cbErr
-	}
-	for {
-		q.Page = currentPage
-		if lastPage >= 0 && currentPage > lastPage {
-			break
-		}
-		err := c.fetchOneGraphQL(queryQL, q, iterator)
-		if err != nil {
-			break
-		}
-		currentPage++
-	}
-	return nil
-}
-
-func (c *Client) fetchAll(path string, q fetchQuery, filters []fetchFilter, cb respCallback) error {
-	currentPage := 1
-	lastPage := -1
-	iterator := func(resp *fasthttp.Response, err error) error {
-		if resp.StatusCode() >= fasthttp.StatusBadRequest {
-			return ErrBadStatus
-		}
-		var cbErr error
-		if cb != nil {
-			cbErr = cb(resp, err)
-		}
-		if lastPage < 0 {
-			count := resp.Header.Peek(HeaderPaginationCount)
-			lastPage, err = fasthttp.ParseUint(count)
-			return err
-		}
-		return cbErr
-	}
-	for {
-		q.Page = currentPage
-		if lastPage >= 0 && currentPage > lastPage {
-			break
-		}
-		err := c.fetchOne(path, q, filters, iterator)
-		if err != nil {
-			break
-		}
-		currentPage++
-	}
-	return nil
-}
-
-func (c *Client) fetchOneGraphQL(queryQL string, q fetchQuery, cb respCallback) error {
-	uri, err := buildFetchPathGraphQL(API_URL+"/v1/graphql", q)
-	if err != nil {
-		return err
-	}
-	req := request{
-		Method:      MethodPost,
-		URL:         uri,
-		ContentType: HeaderContentTypeJson,
-		BodyString:  queryQL,
-	}
-	c.m.Lock()
-	req.AuthToken = c.token
-	c.m.Unlock()
-	if len(req.AuthToken) == 0 {
-		return newErrCredentialsNotFound(req.String())
-	}
-	err = c.network.Do(req, cb)
-	if err != nil {
-		c.log("Failed to fetch: %v, request: %v", err, req)
-	}
-	return err
-}
-
-func (c *Client) fetchOne(path string, q fetchQuery, filters []fetchFilter, cb respCallback) error {
-	uri, err := buildFetchPath(API_URL, path, q, filters)
-	if err != nil {
-		return err
+		return campaigns, err
 	}
 	req := request{
 		Method:      MethodGet,
 		URL:         uri,
 		ContentType: HeaderContentTypeJson,
 	}
-	c.m.Lock()
-	req.AuthToken = c.token
-	c.m.Unlock()
-	if len(req.AuthToken) == 0 {
-		return newErrCredentialsNotFound(req.String())
+	cb := func(resp *fasthttp.Response, err error) error {
+		if err != nil {
+			return err
+		}
+		b := resp.Body()
+		if len(b) == 0 {
+			return ErrEmptyResponse
+		}
+		var res configuration.Configuration
+		err = json.Unmarshal(b, &res)
+		if err != nil {
+			return err
+		}
+		campaigns = res
+		return nil
 	}
 	err = c.network.Do(req, cb)
 	if err != nil {
 		c.log("Failed to fetch: %v, request: %v", err, req)
 	}
-	return err
+
+	c.log("Configuraiton fetched: %v", campaigns)
+	return campaigns, err
 }
 
-func buildFetchPath(base, path string, q fetchQuery, filters []fetchFilter) (string, error) {
+func (c *Client) buildFetchPathClientConfig(base string, siteCode string, environment string) (string, error) {
 	var buf strings.Builder
 	buf.WriteString(base)
-	buf.WriteString(path)
+	buf.WriteString("/mobile")
 	isFirst := true
-	writeDelim := func() {
+	addValue := func(name string, value string) {
 		if !isFirst {
 			buf.WriteByte('&')
 		} else {
 			buf.WriteByte('?')
 			isFirst = false
 		}
+		buf.WriteString(name)
+		buf.WriteByte('=')
+		buf.WriteString(value)
 	}
-	if q.PerPage > 0 {
-		writeDelim()
-		buf.WriteString("perPage=")
-		buf.WriteString(strconv.Itoa(q.PerPage))
-	}
-	if q.Page > 0 {
-		writeDelim()
-		buf.WriteString("page=")
-		buf.WriteString(strconv.Itoa(q.Page))
-	}
-	if len(filters) > 0 {
-		writeDelim()
-		buf.WriteString("filter=")
-		fbuf, err := json.Marshal(filters)
-		if err != nil {
-			return "", err
-		}
-		buf.WriteString(url.QueryEscape(string(fbuf)))
+	addValue("siteCode", siteCode)
+	if len(environment) > 0 {
+		addValue("environment", environment)
 	}
 	return buf.String(), nil
 }
 
-func buildFetchPathGraphQL(base string, q fetchQuery) (string, error) {
-	var buf strings.Builder
-	buf.WriteString(base)
-	isFirst := true
-	writeDelim := func() {
-		if !isFirst {
-			buf.WriteByte('&')
+func (c *Client) checkSiteCodeEnable(campaign configuration.SiteCodeEnabledInterface) error {
+	if !campaign.SiteCodeEnabled() {
+		return newSiteCodeDisabled(c.Cfg.SiteCode)
+	}
+	return nil
+}
+
+func (c *Client) addUserAgent(visitorCode string, ua *types.UserAgent) {
+	if len(c.userAgents) > USER_AGENT_MAX_COUNT {
+		for k := range c.userAgents {
+			delete(c.userAgents, k)
+		}
+	}
+	c.userAgents[visitorCode] = *ua
+}
+
+func (c *Client) getUserAgent(visitorCode string) string {
+	if ua, ok := c.userAgents[visitorCode]; ok {
+		return ua.Value
+	}
+	return ""
+}
+
+func (c *Client) getValidSavedVariation(visitorCode string, experiment *configuration.Experiment) (int, bool) {
+	if savedVariationId, exist := c.variationStorage.GetVariationId(visitorCode, experiment.ID); exist {
+		respoolTimeValue := 0
+		for _, respoolTime := range experiment.RespoolTime {
+			if respoolTime.VariationId == savedVariationId {
+				respoolTimeValue = int(respoolTime.Value)
+			}
+		}
+		return c.variationStorage.IsVariationValid(visitorCode, experiment.ID, respoolTimeValue)
+	}
+	return 0, false
+}
+
+func (c *Client) checkTargeting(visitorCode string, campaignId int, expOrFForRule configuration.TargetingObjectInterface) bool {
+	segment := expOrFForRule.GetTargetingSegment()
+	return segment == nil || segment.CheckTargeting(func(targetingType types.TargetingType) interface{} {
+		return c.getConditionData(targetingType, visitorCode, campaignId)
+	})
+}
+
+func (c *Client) getConditionData(targetingType types.TargetingType, visitorCode string, campaignId int) interface{} {
+	var conditionData interface{}
+	switch targetingType {
+	case types.TargetingCustomDatum:
+		if cell := c.getDataCell(visitorCode); cell != nil {
+			conditionData = cell.Data
 		} else {
-			buf.WriteByte('?')
-			isFirst = false
+			conditionData = []types.TargetingData{}
 		}
+	case types.TargetingTargetExperiment:
+		conditionData = c.variationStorage.GetMapSavedVariationId(visitorCode)
+	case types.TargetingExclusiveExperiment:
+		conditionData = &types.ExclusiveExperimentTargetedData{ExperimentId: campaignId,
+			VisitorVariationStorage: c.variationStorage.GetMapSavedVariationId(visitorCode)}
 	}
-	if q.PerPage > 0 {
-		writeDelim()
-		buf.WriteString("perPage=")
-		buf.WriteString(strconv.Itoa(q.PerPage))
-	}
-	if q.Page > 0 {
-		writeDelim()
-		buf.WriteString("page=")
-		buf.WriteString(strconv.Itoa(q.Page))
-	}
-	return buf.String(), nil
+	return conditionData
 }
 
-func isSiteCodeEnable(site types.Site) bool {
-	return site != types.Site{} && site.IsKameleoonEnabled
+// GetExperimentList returns a list of all experiment ids
+func (c *Client) GetExperimentList() []int {
+	c.m.Lock()
+	defer c.m.Unlock()
+	arrayIds := make([]int, 0, len(c.experiments))
+	for _, exp := range c.experiments {
+		arrayIds = append(arrayIds, exp.ID)
+	}
+	return arrayIds
+}
+
+// GetExperimentListForVisitor returns a list of all experiment ids targeted for a visitor
+// if onlyAllocated is `true` returns a list of allocated experiments for a visitor
+//
+// returns ErrVisitorCodeNotValid error when visitor code is not valid
+func (c *Client) GetExperimentListForVisitor(visitorCode string, onlyAllocated bool) ([]int, error) {
+	if _, err := c.validateVisitorCode(visitorCode); err != nil {
+		return []int{}, err
+	}
+	c.m.Lock()
+	defer c.m.Unlock()
+	arrayIds := make([]int, 0, len(c.experiments))
+	for _, exp := range c.experiments {
+		if c.checkTargeting(visitorCode, exp.ID, &exp) &&
+			(!onlyAllocated || c.getVariationForExperiment(exp, visitorCode) != nil) {
+			arrayIds = append(arrayIds, exp.ID)
+		}
+	}
+	return arrayIds, nil
+}
+
+// GetFeatureList returns a list of all feature flag keys
+func (c *Client) GetFeatureList() []string {
+	c.m.Lock()
+	defer c.m.Unlock()
+	arrayKeys := make([]string, 0, len(c.featureFlagsV2))
+	for _, ff := range c.featureFlagsV2 {
+		arrayKeys = append(arrayKeys, ff.FeatureKey)
+	}
+	return arrayKeys
+}
+
+// GetActiveFeatureListForVisitor returns a list of active feature flag keys for a visitor
+//
+// returns ErrVisitorCodeNotValid error when visitor code is not valid
+func (c *Client) GetActiveFeatureListForVisitor(visitorCode string) ([]string, error) {
+	if _, err := c.validateVisitorCode(visitorCode); err != nil {
+		return []string{}, err
+	}
+	c.m.Lock()
+	defer c.m.Unlock()
+	arrayIds := make([]string, 0, len(c.featureFlagsV2))
+	for _, ff := range c.featureFlagsV2 {
+		variationKey, _ := c.calculateVariationKeyForFeature(&ff, visitorCode)
+		if variationKey != string(types.VARIATION_OFF) {
+			arrayIds = append(arrayIds, ff.FeatureKey)
+		}
+	}
+	return arrayIds, nil
 }

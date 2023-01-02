@@ -6,7 +6,7 @@ import (
 )
 
 type Logger interface {
-	Printf(format string, args ...interface{})
+	Printf(format string, v ...interface{})
 }
 
-var defaultLogger Logger = log.New(os.Stdout, "", log.LstdFlags)
+var defaultLogger Logger = log.New(os.Stdout, "KameleoonClient", log.LstdFlags)

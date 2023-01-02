@@ -6,9 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/segmentio/encoding/json"
-
 	"github.com/Kameleoon/client-go/utils"
+	"github.com/segmentio/encoding/json"
 
 	"net/url"
 )
@@ -51,8 +50,9 @@ const (
 	DataTypeCustom     DataType = "CUSTOM"
 	DataTypeBrowser    DataType = "BROWSER"
 	DataTypeConversion DataType = "CONVERSION"
-	DataTypeInterest   DataType = "INTEREST"
+	DataTypeDevice     DataType = "DEVICE"
 	DataTypePageView   DataType = "PAGE_VIEW"
+	DataTypeUserAgent  DataType = "USER_AGENT"
 )
 
 func GetNonce() string {
@@ -138,7 +138,7 @@ type Browser struct {
 
 func (b Browser) QueryEncode() string {
 	var sb strings.Builder
-	sb.WriteString("eventType=staticData&browser=")
+	sb.WriteString("eventType=staticData&browserIndex=")
 	sb.WriteString(utils.WriteUint(int(b.Type)))
 	sb.WriteString("&nonce=")
 	sb.WriteString(GetNonce())
@@ -150,9 +150,9 @@ func (b Browser) DataType() DataType {
 }
 
 type PageView struct {
-	URL      string
-	Title    string
-	Referrer int
+	URL       string
+	Title     string
+	Referrers []int
 }
 
 func (v PageView) QueryEncode() string {
@@ -161,10 +161,9 @@ func (v PageView) QueryEncode() string {
 	b.WriteString(EncodeURIComponent("href", v.URL))
 	b.WriteString("&title=")
 	b.WriteString(v.Title)
-	b.WriteString("&keyPages=[]")
-	if v.Referrer != 0 {
-		b.WriteString("&referrers=[")
-		b.WriteString(strconv.Itoa(v.Referrer))
+	if len(v.Referrers) > 0 {
+		b.WriteString("&referrersIndices=[")
+		b.WriteString(utils.ArrayToString(v.Referrers, ","))
 		b.WriteByte(']')
 	}
 	b.WriteString("&nonce=")
@@ -177,21 +176,29 @@ func (v PageView) DataType() DataType {
 	return DataTypePageView
 }
 
-type Interest struct {
-	Index int
+type DeviceType string
+
+const (
+	DeviceTypeDesktop DeviceType = "DESKTOP"
+	DeviceTypePhone   DeviceType = "PHONE"
+	DeviceTypeTablet  DeviceType = "TABLET"
+)
+
+type Device struct {
+	Type DeviceType
 }
 
-func (i Interest) QueryEncode() string {
+func (device Device) QueryEncode() string {
 	var b strings.Builder
-	b.WriteString("eventType=interests&indexes=[")
-	b.WriteString(strconv.Itoa(i.Index))
-	b.WriteString("]&fresh=true&nonce=")
+	b.WriteString("eventType=staticData&deviceType=")
+	b.WriteString(string(device.Type))
+	b.WriteString("&nonce=")
 	b.WriteString(GetNonce())
 	return b.String()
 }
 
-func (i Interest) DataType() DataType {
-	return DataTypeInterest
+func (device Device) DataType() DataType {
+	return DataTypeDevice
 }
 
 type Conversion struct {
@@ -217,6 +224,18 @@ func (c Conversion) DataType() DataType {
 	return DataTypeConversion
 }
 
+type UserAgent struct {
+	Value string
+}
+
+func (ua UserAgent) QueryEncode() string {
+	return ""
+}
+
+func (ua UserAgent) DataType() DataType {
+	return DataTypeUserAgent
+}
+
 func EncodeURIComponent(key string, value string) string {
 	parameters := url.Values{}
 	parameters.Add(key, value)
@@ -230,4 +249,9 @@ func EncodeURIComponent(key string, value string) string {
 	encoded = strings.ReplaceAll(encoded, "%2A", "*")
 
 	return encoded
+}
+
+func Remove(seq []Data, index int) []Data {
+	seq[index] = seq[len(seq)-1]
+	return seq[:len(seq)-1]
 }

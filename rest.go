@@ -35,7 +35,7 @@ type respCallback func(resp *fasthttp.Response, err error) error
 
 func newNetworkClient(cfg *NetworkConfig) networkClient {
 	c := &fasthttp.Client{
-		Name:            cfg.UserAgent,
+		Name:            cfg.KameleoonClient,
 		ReadTimeout:     cfg.ReadTimeout,
 		WriteTimeout:    cfg.WriteTimeout,
 		MaxConnsPerHost: cfg.MaxConnsPerHost,
@@ -56,8 +56,10 @@ func newNetworkClient(cfg *NetworkConfig) networkClient {
 func (c *rest) Do(r request, callback respCallback) error {
 	req := fasthttp.AcquireRequest()
 	req.Header.SetMethod(r.Method)
-	req.Header.SetUserAgent(c.cfg.UserAgent)
 	req.Header.SetRequestURI(r.URL)
+	if len(r.UserAgent) > 0 {
+		req.Header.SetUserAgent(r.UserAgent)
+	}
 	if len(r.AuthToken) > 0 {
 		req.Header.Set(HeaderAuthorization, r.AuthToken)
 	}
@@ -98,6 +100,7 @@ type request struct {
 	Body         []byte
 	Timeout      time.Duration
 	ClientHeader string
+	UserAgent    string
 }
 
 func (r request) String() string {

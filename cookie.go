@@ -98,15 +98,24 @@ func newVisitorCodeCookie(visitorCode, domain string) *fasthttp.Cookie {
 	return c
 }
 
-func getHashDouble(containerID int, visitorCode string, respoolTime types.RespoolTime) float64 {
+func getHashDouble(visitorCode string, containerID int, respoolTime []types.RespoolTime) float64 {
+	return getHashDoubleSuffix(visitorCode, containerID, respoolTime, "")
+}
+
+func getHashDoubleV2(visitorCode string, containerID int, suffix string) float64 {
+	return getHashDoubleSuffix(visitorCode, containerID, nil, suffix)
+}
+
+func getHashDoubleSuffix(visitorCode string, containerID int, respoolTime []types.RespoolTime, suffix string) float64 {
 	var b []byte
 	b = append(b, visitorCode...)
 	b = append(b, utils.WriteUint(containerID)...)
+	b = append(b, suffix...)
 
 	vals := make([]float64, len(respoolTime))
 	i := 0
 	for _, v := range respoolTime {
-		vals[i] = v
+		vals[i] = v.Value
 		i++
 	}
 	sort.Float64s(vals)

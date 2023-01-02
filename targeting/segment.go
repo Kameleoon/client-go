@@ -35,7 +35,7 @@ func (s Segment) Data() *types.Segment {
 	return s.s
 }
 
-func (s *Segment) CheckTargeting(data []types.TargetingData) bool {
+func (s *Segment) CheckTargeting(data GetTargetingData) bool {
 	if s == nil || s.Tree == nil {
 		return true
 	}

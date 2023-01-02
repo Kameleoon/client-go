@@ -36,59 +36,6 @@ const (
 	EventMethodMouseup   EventMethodType = "MOUSEUP"
 )
 
-type SiteResponse struct {
-	ID                  int                   `json:"id"`
-	URL                 string                `json:"url"`
-	Description         string                `json:"description"`
-	Code                string                `json:"code"`
-	BehaviorWhenTimeout WhenTimeoutType       `json:"behaviorWhenTimeout"`
-	DataStorage         DataStorageType       `json:"dataStorage"`
-	TrackingScript      string                `json:"trackingScript"`
-	DomainNames         []string              `json:"domainNames"`
-	Indicators          []IndicatorType       `json:"indicators"`
-	DateCreated         TimeNoTZ              `json:"dateCreated"`
-	IsScriptActive      bool                  `json:"isScriptActive"`
-	CaptureEventMethod  EventMethodType       `json:"captureEventMethod"`
-	IsAudienceUsed      bool                  `json:"isAudienceUsed"`
-	IsKameleoonEnabled  bool                  `json:"isKameleoonEnabled"`
-	Experiment          ExperimentConfig      `json:"experimentConfig"`
-	Personalization     PersonalizationConfig `json:"personalizationConfig"`
-	Audience            AudienceConfig        `json:"audienceConfig"`
-}
-
-type ConsentType string
-
-const (
-	ConsentOff         ConsentType = "OFF"
-	ConsentRequired    ConsentType = "REQUIRED"
-	ConsentInteractive ConsentType = "INTERACTIVE"
-	ConsentIABTCF      ConsentType = "IABTCF"
-)
-
-type ConsentOptoutType string
-
-const (
-	ConsentOptoutRun   ConsentOptoutType = "RUN"
-	ConsentOptoutBlock ConsentOptoutType = "BLOCK"
-)
-
-type BeforeConsentType string
-
-const (
-	BeforeConsentNone      BeforeConsentType = "NONE"
-	BeforeConsentPartially BeforeConsentType = "PARTIALLY"
-	BeforeConsentAll       BeforeConsentType = "ALL"
-)
-
-type PersonalizationConfig struct {
-	PersonalizationsDeviation        float64           `json:"personalizationsDeviation"`
-	IsSameTypePersonalizationEnabled bool              `json:"isSameTypePersonalizationEnabled"`
-	IsSameJqueryInjectionAllowed     bool              `json:"isSameJqueryInjectionAllowed"`
-	PersonalizationConsent           ConsentType       `json:"personalizationConsent"`
-	PersonalizationConsentOptout     ConsentOptoutType `json:"personalizationConsentOptout"`
-	BeforePersonalizationConsent     BeforeConsentType `json:"beforePersonalizationConsent"`
-}
-
 type TimeNoTZ time.Time
 type TimeTZ struct {
 	time.Time
