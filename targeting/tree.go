@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Kameleoon/client-go/targeting/conditions"
-	"github.com/Kameleoon/client-go/types"
+	"github.com/Kameleoon/client-go/v2/targeting/conditions"
+	"github.com/Kameleoon/client-go/v2/types"
 )
 
 type GetTargetingData func(types.TargetingType) interface{}

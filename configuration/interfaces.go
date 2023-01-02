@@ -1,6 +1,6 @@
 package configuration
 
-import "github.com/Kameleoon/client-go/targeting"
+import "github.com/Kameleoon/client-go/v2/targeting"
 
 type TargetingObjectInterface interface {
 	GetTargetingSegment() *targeting.Segment

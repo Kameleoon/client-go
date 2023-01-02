@@ -3,8 +3,8 @@ package configuration
 import (
 	"time"
 
-	"github.com/Kameleoon/client-go/targeting"
-	"github.com/Kameleoon/client-go/types"
+	"github.com/Kameleoon/client-go/v2/targeting"
+	"github.com/Kameleoon/client-go/v2/types"
 	"github.com/segmentio/encoding/json"
 )
 

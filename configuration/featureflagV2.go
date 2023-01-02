@@ -1,6 +1,6 @@
 package configuration
 
-import "github.com/Kameleoon/client-go/types"
+import "github.com/Kameleoon/client-go/v2/types"
 
 type FeatureFlagV2 struct {
 	ID                  int                 `json:"id"`

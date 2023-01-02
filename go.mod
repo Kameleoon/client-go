@@ -1,4 +1,4 @@
-module github.com/Kameleoon/client-go
+module github.com/Kameleoon/client-go/v2
 
 go 1.15
 

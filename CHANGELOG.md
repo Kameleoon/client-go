@@ -1,6 +1,9 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 2.0.1 - 2023-01-02
+* Fixed issue with distribution of v2
+
 ## 2.0.0 - 2023-01-02
 * Significantly improved configuration load time
 * Added support for **Experiment** & **Exclusive Campaign** conditions. Related to [`TriggerExperiment`](https://developers.kameleoon.com/go-sdk.html#triggerexperiment)

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kameleoon/client-go/utils"
+	"github.com/Kameleoon/client-go/v2/utils"
 	"github.com/segmentio/encoding/json"
 
 	"net/url"

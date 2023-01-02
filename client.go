@@ -6,17 +6,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Kameleoon/client-go/v2/configuration"
+	"github.com/Kameleoon/client-go/v2/storage"
+	"github.com/Kameleoon/client-go/v2/types"
+	"github.com/Kameleoon/client-go/v2/utils"
 	"github.com/cornelk/hashmap"
 	"github.com/segmentio/encoding/json"
 	"github.com/valyala/fasthttp"
-
-	"github.com/Kameleoon/client-go/configuration"
-	"github.com/Kameleoon/client-go/storage"
-	"github.com/Kameleoon/client-go/types"
-	"github.com/Kameleoon/client-go/utils"
 )
 
-const SDKVersion = "2.0.0"
+const SDKVersion = "2.0.1"
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
