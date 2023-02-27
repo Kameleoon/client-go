@@ -1,6 +1,9 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 2.0.3 - 2023-02-27
+* Minor bug fixing
+
 ## 2.0.2 - 2023-01-02
 * Removed dependency on first version
 
@@ -20,7 +23,7 @@ All notable changes to this project will be documented in this file.
     - [`GetExperimentList`](https://developers.kameleoon.com/go-sdk.html#GetExperimentList)
     - [`GetExperimentListForVisitor`](https://developers.kameleoon.com/go-sdk.html#GetExperimentListForVisitor)
 * Added support of `is among the values` operator for Custom Data
-* Added KameleoonData [`Device`](https://developers.kameleoon.com/go-sdk.html#device) data. Possible values are: **Phone**, **Tablet**, **Desktop**. 
+* Added KameleoonData [`Device`](https://developers.kameleoon.com/go-sdk.html#device) data. Possible values are: **Phone**, **Tablet**, **Desktop**.
 * Removed KameleoonData `Interest`
 
 ## 1.0.6 - 2022-04-12
