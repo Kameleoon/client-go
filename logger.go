@@ -9,4 +9,4 @@ type Logger interface {
 	Printf(format string, v ...interface{})
 }
 
-var defaultLogger Logger = log.New(os.Stdout, "KameleoonClient", log.LstdFlags)
+var defaultLogger Logger = log.New(os.Stdout, "KameleoonClient SDK", log.LstdFlags)

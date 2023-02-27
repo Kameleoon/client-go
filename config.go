@@ -13,8 +13,9 @@ const (
 	DefaultConfigUpdateInterval = time.Hour
 	DefaultRequestTimeout       = 2 * time.Second
 	DefaultVisitorDataMaxSize   = 500 // 500 mb
-	UserAgent                   = "sdk/go/"
+	ClientHeader                = "sdk/go/"
 	DefaultEnvironment          = ""
+	DefaultUserAgentMaxSize     = 100_000
 )
 
 type Config struct {
@@ -31,6 +32,7 @@ type Config struct {
 	VisitorDataMaxSize   int           `yml:"visitor_data_max_size" yaml:"visitor_data_max_size"`
 	VerboseMode          bool          `yml:"verbose_mode" yaml:"verbose_mode"`
 	Environment          string        `yml:"environment" yaml:"environment"`
+	UserAgentMaxSize     int           `yml:"-" yaml:"-"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -59,6 +61,9 @@ func (c *Config) defaults() {
 	}
 	if len(c.Environment) == 0 {
 		c.Environment = DefaultEnvironment
+	}
+	if c.UserAgentMaxSize == 0 {
+		c.UserAgentMaxSize = DefaultUserAgentMaxSize
 	}
 	c.Network.defaults(c.Version)
 }
@@ -107,7 +112,7 @@ type NetworkConfig struct {
 
 func (c *NetworkConfig) defaults(version string) {
 	var b strings.Builder
-	b.WriteString(UserAgent)
+	b.WriteString(ClientHeader)
 	b.WriteString(version)
 	c.KameleoonClient = b.String()
 

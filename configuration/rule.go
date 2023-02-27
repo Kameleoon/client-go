@@ -22,12 +22,12 @@ func (r *Rule) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (r *Rule) GetVariationKey(hashDouble float64) *string {
+func (r *Rule) GetVariationByHash(hashDouble float64) *types.VariationByExposition {
 	total := 0.0
 	for _, element := range r.VariationByExposition {
 		total += element.Exposition
 		if total >= hashDouble {
-			return &element.VariationKey
+			return &element
 		}
 	}
 	return nil
@@ -42,6 +42,23 @@ func (r *Rule) GetVariationIdByKey(key string) *int {
 	return nil
 }
 
+func (r *Rule) GetVariation(id int) *types.VariationByExposition {
+	for _, element := range r.VariationByExposition {
+		if *element.VariationID == id {
+			return &element
+		}
+	}
+	return nil
+}
+
 func (r *Rule) GetTargetingSegment() *targeting.Segment {
 	return r.TargetingSegment
+}
+
+func (r *Rule) IsExperimentType() bool {
+	return r.Type == string(types.RuleTypeExperimentation)
+}
+
+func (r *Rule) IsTargetDeliveryType() bool {
+	return r.Type == string(types.RuleTypeTargetedDelivery)
 }
