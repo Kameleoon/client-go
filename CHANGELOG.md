@@ -1,6 +1,9 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 2.0.4 - 2023-03-07
+* [`GetVariationAssociatedData`](https://developers.kameleoon.com/go-sdk.html#getvariationassociateddata) Fixed. No need to unquote bytes upon obtaining anymore.
+
 ## 2.0.3 - 2023-02-27
 * Minor bug fixing
 
