@@ -15,7 +15,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-const SDKVersion = "2.0.3"
+const SDKVersion = "2.0.4"
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
@@ -289,7 +289,7 @@ func (c *Client) GetVariationAssociatedData(variationID int) ([]byte, error) {
 		for _, v := range ex.Variations {
 			if v.ID == variationID {
 				c.m.Unlock()
-				return v.CustomJson, nil
+				return []byte(v.CustomJson), nil
 			}
 		}
 	}
@@ -386,7 +386,7 @@ func (c *Client) getFeatureVariationKey(visitorCode string, featureKey string) (
 		//send tracking request if rule is type of EXPERIMENTATION
 		c.sendTrackingRequest(visitorCode, variation, rule)
 		// save variationId to variation storage if it wasn't saved before
-		if shouldSave {
+		if shouldSave && variation.VariationID != nil {
 			c.variationStorage.UpdateVariation(visitorCode, *rule.ExperimentID, *variation.VariationID)
 		}
 	}
@@ -442,7 +442,7 @@ func (c *Client) getSavedVariationForRule(visitorCode string, rule *configuratio
 func (c *Client) sendTrackingRequest(visitorCode string, variation *types.VariationByExposition, rule *configuration.Rule) {
 	if rule.ExperimentID != nil {
 		variationId := 0
-		if variation != nil {
+		if variation != nil && variation.VariationID != nil {
 			variationId = *variation.VariationID
 		}
 		req := trackingRequest{
