@@ -43,34 +43,47 @@ func (c *CustomDatum) CheckTargeting(targetData interface{}) bool {
 	if _, ok := targetData.([]types.TargetingData); !ok {
 		return false
 	}
-	var customData []*types.CustomData
+	var arrayCustomData []*types.CustomData
 	for _, td := range targetData.([]types.TargetingData) {
 		if td.Data.DataType() != types.DataTypeCustom {
 			continue
 		}
 		custom, ok := td.Data.(*types.CustomData)
 		if ok && custom.ID == c.Index {
-			customData = append(customData, custom)
+			arrayCustomData = append(arrayCustomData, custom)
 		}
 	}
-	if len(customData) == 0 {
+	if len(arrayCustomData) == 0 {
 		return c.Operator == types.OperatorUndefined
 	}
-	customDatum := customData[len(customData)-1]
+	customData := arrayCustomData[len(arrayCustomData)-1]
+	customDataValues := customData.GetValues()
+	if len(customDataValues) == 0 {
+		return c.checkTargeting(customData.Value)
+	}
+	for _, value := range customDataValues {
+		if c.checkTargeting(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *CustomDatum) checkTargeting(customDataValue interface{}) bool {
 	switch c.Operator {
 	case types.OperatorContains:
-		str, ok1 := customDatum.Value.(string)
+		str, ok1 := customDataValue.(string)
 		value, ok2 := c.Value.(string)
 		if !ok1 || !ok2 {
 			return false
 		}
 		return strings.Contains(str, value)
 	case types.OperatorExact:
-		if c.Value == customDatum.Value {
+		if c.Value == customDataValue {
 			return true
 		}
 	case types.OperatorMatch:
-		str, ok1 := customDatum.Value.(string)
+		str, ok1 := customDataValue.(string)
 		pattern, ok2 := c.Value.(string)
 		if !ok1 || !ok2 {
 			return false
@@ -90,7 +103,7 @@ func (c *CustomDatum) CheckTargeting(targetData interface{}) bool {
 			return false
 		}
 		var value int
-		switch v := customDatum.Value.(type) {
+		switch v := customDataValue.(type) {
 		case string:
 			value, _ = strconv.Atoi(v)
 		case int:
@@ -113,12 +126,12 @@ func (c *CustomDatum) CheckTargeting(targetData interface{}) bool {
 			}
 		}
 	case types.OperatorIsTrue:
-		val, err := strconv.ParseBool(customDatum.Value.(string))
+		val, err := strconv.ParseBool(customDataValue.(string))
 		if err == nil {
 			return val
 		}
 	case types.OperatorIsFalse:
-		val, err := strconv.ParseBool(customDatum.Value.(string))
+		val, err := strconv.ParseBool(customDataValue.(string))
 		if err == nil {
 			return !val
 		}
@@ -128,7 +141,7 @@ func (c *CustomDatum) CheckTargeting(targetData interface{}) bool {
 		allMatches = utils.Map(allMatches, func(element string) string {
 			return strings.Trim(element, "\"")
 		})
-		return utils.Contains(allMatches, customDatum.Value.(string))
+		return utils.Contains(allMatches, customDataValue.(string))
 	}
 	return false
 }

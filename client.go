@@ -15,7 +15,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-const SDKVersion = "2.0.4"
+const SDKVersion = "2.0.5"
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
@@ -44,6 +44,7 @@ type Client struct {
 }
 
 func NewClient(cfg *Config) *Client {
+	cfg.defaults()
 	c := &Client{
 		Cfg:              cfg,
 		network:          newNetworkClient(&cfg.Network),
@@ -102,18 +103,19 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int) (int, e
 	}
 
 	var ex configuration.Experiment
+	isExNotFound := true
 	c.m.Lock()
-	for i, e := range c.experiments {
+	for _, e := range c.experiments {
 		if e.ID == experimentID {
 			ex = e
+			isExNotFound = false
 			break
-		}
-		if i == len(c.experiments)-1 {
-			c.m.Unlock()
-			return -1, newErrExperimentConfigNotFound(utils.WriteUint(experimentID))
 		}
 	}
 	c.m.Unlock()
+	if isExNotFound {
+		return -1, newErrExperimentConfigNotFound(utils.WriteUint(experimentID))
+	}
 
 	if err := c.checkSiteCodeEnable(&ex); err != nil {
 		return -1, err
@@ -937,8 +939,8 @@ func (c *Client) GetExperimentListForVisitor(visitorCode string, onlyAllocated b
 	arrayIds := make([]int, 0, len(c.experiments))
 	for _, exp := range c.experiments {
 		isTargeted := c.checkTargeting(visitorCode, exp.ID, &exp)
-		// experiment should targeted if onlyAllocated == false
-		// experiment should targeted & has variation if onlyAllocated == true
+		// experiment should be only targeted if onlyAllocated == false
+		// experiment should be targeted & has variation if onlyAllocated == true
 		needAppendId := isTargeted && !onlyAllocated
 		if isTargeted && onlyAllocated {
 			if variationId, _ := c.getVariationForExperiment(visitorCode, &exp); variationId != nil {
