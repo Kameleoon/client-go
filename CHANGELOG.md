@@ -2,7 +2,7 @@
 All notable changes to this project will be documented in this file.
 
 ## 2.0.5 - 2023-03-13
-* Added possibility for [`CustomData`](https://developers.kameleoon.com/go-sdk.html#adddata) to use variable argument list of values
+* Added possibility for [`CustomData`](https://developers.kameleoon.com/go-sdk.html#customdata) to use variable argument list of values
 * Fixed issue with [`TriggerExperiment`](https://developers.kameleoon.com/go-sdk.html#triggerexperiment) returning wrong error for client with no experiments
 * Fixed issue with provided `Config` with not specified values; related to [initialization](https://developers.kameleoon.com/go-sdk.html#1-initialize-the-kameleoon-client)
 
