@@ -45,8 +45,12 @@ func (c *Client) postTrackingAsync(r trackingRequest) {
 			if _, exist := dataCell.Index[i]; exist {
 				continue
 			}
-			sb.WriteString(dataCell.Data[i].QueryEncode())
-			sb.WriteByte('\n')
+			query := dataCell.Data[i].QueryEncode()
+			// need to check len because CustomData can have empty values
+			if len(query) > 0 {
+				sb.WriteString(dataCell.Data[i].QueryEncode())
+				sb.WriteByte('\n')
+			}
 		}
 	}
 	req.BodyString = sb.String()
@@ -112,8 +116,6 @@ func (c *Client) buildTrackingPath(base string, r trackingRequest) string {
 		b.WriteString(c.Cfg.SiteCode)
 		b.WriteString("&visitorCode=")
 		b.WriteString(r.VisitorCode)
-		b.WriteString("&nonce=")
-		b.WriteString(types.GetNonce())
 		b.WriteString("&experimentID=")
 		b.WriteString(utils.WriteUint(r.ExperimentID))
 		if r.VariationID < 0 {
@@ -124,6 +126,8 @@ func (c *Client) buildTrackingPath(base string, r trackingRequest) string {
 		if r.NoneVariation {
 			b.WriteString("&noneVariation=true")
 		}
+		b.WriteString("&nonce=")
+		b.WriteString(types.GetNonce())
 		return b.String()
 	}
 	return ""

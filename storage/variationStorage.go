@@ -15,8 +15,8 @@ func (vs *VariationStorage) GetVariationId(visitorCode string, experimentId int)
 func (vs *VariationStorage) IsVariationValid(visitorCode string, experimentId int, respoolTime int) (int, bool) {
 	if storageVisitor, exist := vs.Storage[visitorCode]; exist {
 		if variation, exist := storageVisitor[experimentId]; exist {
-			if variation.isValid(int64(respoolTime)) {
-				return variation.VariationId, true
+			if variation.isValid(uint32(respoolTime)) {
+				return int(variation.VariationId), true
 			}
 		}
 	}
@@ -28,14 +28,14 @@ func (vs *VariationStorage) UpdateVariation(visitorCode string, experimentId int
 	if !exist {
 		vs.Storage[visitorCode] = make(map[int]*VisitorVariation)
 	}
-	vs.Storage[visitorCode][experimentId] = NewVisitorVariation(variationId)
+	vs.Storage[visitorCode][experimentId] = NewVisitorVariation(uint32(variationId))
 }
 
 func (vs *VariationStorage) GetMapSavedVariationId(visitorCode string) map[int]int {
 	if storageVisitor, exist := vs.Storage[visitorCode]; exist {
 		mapVariations := make(map[int]int)
 		for key, value := range storageVisitor {
-			mapVariations[key] = value.VariationId
+			mapVariations[key] = int(value.VariationId)
 		}
 		return mapVariations
 	}

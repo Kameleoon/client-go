@@ -97,6 +97,7 @@ func (c EventData) DataType() DataType {
 }
 
 //TODO: remove Value in next major version and make Values public
+// It's need to have backward compatibility
 type CustomData struct {
 	ID     string
 	Value  interface{}
@@ -112,6 +113,9 @@ func NewCustomData(id string, values ...string) *CustomData {
 }
 
 func (c CustomData) QueryEncode() string {
+	if c.Value == nil && len(c.values) == 0 {
+		return ""
+	}
 	var val strings.Builder
 	c.addStringValues(&val)
 	valueToCount := EncodeURIComponent("valueToCount", val.String())

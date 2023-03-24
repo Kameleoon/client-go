@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 2.0.6 - 2023-03-24
+* Minor bug fixing for `is among the values` operator for [`CustomData`](https://developers.kameleoon.com/go-sdk.html#customdata).
+* Renaming of methods:
+    - `RetrieveDataFromRemoteSource`-> [`GetRemoteData`](https://developers.kameleoon.com/go-sdk.html#GetRemoteData)
+
 ## 2.0.5 - 2023-03-13
 * Added possibility for [`CustomData`](https://developers.kameleoon.com/go-sdk.html#customdata) to use variable argument list of values
 * Fixed issue with [`TriggerExperiment`](https://developers.kameleoon.com/go-sdk.html#triggerexperiment) returning wrong error for client with no experiments

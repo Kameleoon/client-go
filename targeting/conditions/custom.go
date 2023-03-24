@@ -1,6 +1,7 @@
 package conditions
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,6 +18,9 @@ func NewCustomDatum(c types.TargetingCondition) *CustomDatum {
 	}
 	if c.IsInclude != nil {
 		include = *c.IsInclude
+	}
+	if c.Value == nil {
+		c.Value = ""
 	}
 	return &CustomDatum{
 		Type:     c.Type,
@@ -57,91 +61,97 @@ func (c *CustomDatum) CheckTargeting(targetData interface{}) bool {
 		return c.Operator == types.OperatorUndefined
 	}
 	customData := arrayCustomData[len(arrayCustomData)-1]
-	customDataValues := customData.GetValues()
-	if len(customDataValues) == 0 {
-		return c.checkTargeting(customData.Value)
-	}
-	for _, value := range customDataValues {
-		if c.checkTargeting(value) {
-			return true
+	return c.checkTargeting(customData.GetValues())
+}
+
+func (c *CustomDatum) checkTargeting(customDataValues []string) bool {
+	switch c.Operator {
+	case types.OperatorContains:
+		value, ok := c.Value.(string)
+		if !ok {
+			return false
+		}
+		return c.contains(customDataValues, func(customDataValue string) bool {
+			return strings.Contains(customDataValue, value)
+		})
+	case types.OperatorExact:
+		return c.contains(customDataValues, func(customDataValue string) bool {
+			return customDataValue == c.Value
+		})
+	case types.OperatorMatch:
+		pattern, ok := c.Value.(string)
+		if !ok {
+			return false
+		}
+		return c.contains(customDataValues, func(customDataValue string) bool {
+			matched, err := regexp.MatchString(pattern, customDataValue)
+			if err == nil && matched {
+				return true
+			}
+			return false
+		})
+	case types.OperatorLower, types.OperatorGreater, types.OperatorEqual:
+		var number float64
+		switch v := c.Value.(type) {
+		case string:
+			if val, err := strconv.ParseFloat(v, 64); err == nil {
+				number = val
+			} else {
+				return false
+			}
+		case int:
+			number = float64(v)
+		case float64:
+			number = v
+		default:
+			return false
+		}
+		return c.contains(customDataValues, func(customDataValue string) bool {
+			if value, err := strconv.ParseFloat(customDataValue, 64); err == nil {
+				switch c.Operator {
+				case types.OperatorLower:
+					return value < number
+				case types.OperatorEqual:
+					return value == number
+				case types.OperatorGreater:
+					return value > number
+				}
+			}
+			return false
+		})
+	case types.OperatorIsTrue:
+		return c.contains(customDataValues, func(customDataValue string) bool {
+			val, err := strconv.ParseBool(customDataValue)
+			return err == nil && val
+		})
+	case types.OperatorIsFalse:
+		return c.contains(customDataValues, func(customDataValue string) bool {
+			val, err := strconv.ParseBool(customDataValue)
+			return err == nil && !val
+		})
+	case types.OperatorIsAmongValues:
+		var values []interface{}
+		if err := json.Unmarshal([]byte(c.Value.(string)), &values); err == nil {
+			mapValues := utils.MapToStringDict(values, func(dict *map[string]interface{}, element interface{}) {
+				elementString := fmt.Sprintf("%v", element)
+				(*dict)[elementString] = true
+			})
+			return c.contains(customDataValues, func(customDataValue string) bool {
+				_, exist := mapValues[customDataValue]
+				return exist
+			})
+		} else {
+			fmt.Println(err)
 		}
 	}
 	return false
 }
 
-func (c *CustomDatum) checkTargeting(customDataValue interface{}) bool {
-	switch c.Operator {
-	case types.OperatorContains:
-		str, ok1 := customDataValue.(string)
-		value, ok2 := c.Value.(string)
-		if !ok1 || !ok2 {
-			return false
-		}
-		return strings.Contains(str, value)
-	case types.OperatorExact:
-		if c.Value == customDataValue {
+func (c *CustomDatum) contains(customDataValues []string, callback func(string) bool) bool {
+	for _, val := range customDataValues {
+		if callback(val) {
 			return true
 		}
-	case types.OperatorMatch:
-		str, ok1 := customDataValue.(string)
-		pattern, ok2 := c.Value.(string)
-		if !ok1 || !ok2 {
-			return false
-		}
-		matched, err := regexp.MatchString(pattern, str)
-		if err == nil && matched {
-			return true
-		}
-	case types.OperatorLower, types.OperatorGreater, types.OperatorEqual:
-		var number int
-		switch v := c.Value.(type) {
-		case string:
-			number, _ = strconv.Atoi(v)
-		case int:
-			number = v
-		default:
-			return false
-		}
-		var value int
-		switch v := customDataValue.(type) {
-		case string:
-			value, _ = strconv.Atoi(v)
-		case int:
-			value = v
-		default:
-			return false
-		}
-		switch c.Operator {
-		case types.OperatorLower:
-			if value < number {
-				return true
-			}
-		case types.OperatorEqual:
-			if value == number {
-				return true
-			}
-		case types.OperatorGreater:
-			if value > number {
-				return true
-			}
-		}
-	case types.OperatorIsTrue:
-		val, err := strconv.ParseBool(customDataValue.(string))
-		if err == nil {
-			return val
-		}
-	case types.OperatorIsFalse:
-		val, err := strconv.ParseBool(customDataValue.(string))
-		if err == nil {
-			return !val
-		}
-	case types.OperatorIsAmongValues:
-		regexpAmongValues := regexp.MustCompile("\"([^\"]*)\"")
-		allMatches := regexpAmongValues.FindAllString(c.Value.(string), -1)
-		allMatches = utils.Map(allMatches, func(element string) string {
-			return strings.Trim(element, "\"")
-		})
-		return utils.Contains(allMatches, customDataValue.(string))
 	}
 	return false
 }

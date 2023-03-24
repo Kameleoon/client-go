@@ -2,6 +2,7 @@ package kameleoon
 
 import (
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,7 +16,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-const SDKVersion = "2.0.5"
+const SDKVersion = "2.0.6"
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
@@ -101,20 +102,9 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int) (int, e
 	if _, err := c.validateVisitorCode(visitorCode); err != nil {
 		return -1, err
 	}
-
-	var ex configuration.Experiment
-	isExNotFound := true
-	c.m.Lock()
-	for _, e := range c.experiments {
-		if e.ID == experimentID {
-			ex = e
-			isExNotFound = false
-			break
-		}
-	}
-	c.m.Unlock()
-	if isExNotFound {
-		return -1, newErrExperimentConfigNotFound(utils.WriteUint(experimentID))
+	ex, err := c.getExperiment(experimentID)
+	if err != nil {
+		return -1, err
 	}
 
 	if err := c.checkSiteCodeEnable(&ex); err != nil {
@@ -150,13 +140,21 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int) (int, e
 
 // return parameters: first - variationId , second - should to save to variation storage
 func (c *Client) getVariationForExperiment(visitorCode string, exp *configuration.Experiment) (*int, bool) {
-	if savedVariationId, exist := c.getValidSavedVariation(visitorCode, exp); exist {
-		return &savedVariationId, false
-	}
+
+	// Disable searching in variation storage (uncommented if you need use variation storage)
+	// if savedVariationId, exist := c.getValidSavedVariation(visitorCode, exp); exist {
+	// 	return &savedVariationId, false
+	// }
+
 	threshold := getHashDouble(visitorCode, exp.ID, exp.RespoolTime)
 	for _, deviation := range exp.Deviations {
 		threshold -= deviation.Value
 		if threshold < 0 {
+
+			// Disable saving in variation storage (uncommented if you need use variation storage)
+			// if return true as second argument the variation will be saved
+			// return &deviation.VariationId, true
+
 			return &deviation.VariationId, true
 		}
 	}
@@ -377,15 +375,20 @@ func (c *Client) getFeatureVariationKey(visitorCode string, featureKey string) (
 		return nil, string(types.VARIATION_OFF), err
 	}
 	//find feature flag else throw ErrFeatureConfigNotFound error
-	featureFlag, err := c.findFeatureFlagV2(featureKey)
+	featureFlag, err := c.getFeatureFlag(featureKey)
 	if err != nil {
 		return nil, string(types.VARIATION_OFF), err
 	}
 	variation, rule, shouldSave := c.getVariationRuleForFeature(visitorCode, &featureFlag)
 	// get variation key from feature flag
-	variationKey := featureFlag.GetVariationKey(variation, rule)
-	if rule != nil && rule.Type == string(types.RuleTypeExperimentation) {
-		//send tracking request if rule is type of EXPERIMENTATION
+	variationKey := c.calculateVariationKey(variation, rule, &featureFlag.DefaultVariationKey)
+
+	// Previous logic when you need to send tracking request only for EXPERIMENTATION rules
+	// if rule != nil && rule.Type == string(types.RuleTypeExperimentation) {
+
+	// Need to send tracking request if EXPERIMENTATION rule
+	// or TARGETED DELIVERY rule if it has variation
+	if rule != nil && (rule.IsExperimentType() || variation != nil) {
 		c.sendTrackingRequest(visitorCode, variation, rule)
 		// save variationId to variation storage if it wasn't saved before
 		if shouldSave && variation.VariationID != nil {
@@ -395,36 +398,55 @@ func (c *Client) getFeatureVariationKey(visitorCode string, featureKey string) (
 	return &featureFlag, variationKey, nil
 }
 
+func (c *Client) calculateVariationKey(varByExp *types.VariationByExposition,
+	rule *configuration.Rule, defaultVariationKey *string) string {
+	if varByExp != nil {
+		return varByExp.VariationKey
+	} else if rule != nil && rule.IsExperimentType() {
+		return string(types.VARIATION_OFF)
+	} else {
+		return *defaultVariationKey
+	}
+}
+
 // getVariationRuleForFeature is a helper method for calculate variation key for feature flag
 func (c *Client) getVariationRuleForFeature(visitorCode string, featureFlag *configuration.FeatureFlagV2) (*types.VariationByExposition, *configuration.Rule, bool) {
 	// no rules -> return DefaultVariationKey
 	if len(featureFlag.Rules) > 0 {
-		//uses for rule exposition
-		hashRule := getHashDoubleV2(visitorCode, featureFlag.ID, "")
 		//uses for variation's expositions
 		hashVariation := getHashDoubleV2(visitorCode, featureFlag.ID, "variation")
 		for _, rule := range featureFlag.Rules {
 			//check if visitor is targeted for rule, else next rule
 			if c.checkTargeting(visitorCode, featureFlag.ID, &rule) {
+
+				// Disable searching in variation storage (uncommented if you need use variation storage)
 				// chech for saved variation for rule if it's experimentation rule
-				if savedVariation, found := c.getSavedVariationForRule(visitorCode, &rule); found {
-					return savedVariation, &rule, false
-				}
-				var variation *types.VariationByExposition
+				// if savedVariation, found := c.getSavedVariationForRule(visitorCode, &rule); found {
+				// 	return savedVariation, &rule, false
+				// }
+
+				//uses for rule exposition
+				hashRule := getHashDoubleV2(visitorCode, featureFlag.ID, strconv.Itoa(rule.Order))
+
 				//check main expostion for rule with hashRule
 				if hashRule < rule.Exposition {
 					// get variation with new hashVariation
-					variation = rule.GetVariationByHash(hashVariation)
+					variation := rule.GetVariationByHash(hashVariation)
+					shouldSaveVariation := variation != nil
+					return variation, &rule, shouldSaveVariation
 				}
 				// need to take next rule if:
 				// 1. Variation is not defined
 				// 2. Type of current is EXPERIMENTATION
 				// 3. Current rule is not the latest rule in order
-				if variation == nil && rule.IsExperimentType() && rule.Order < len(featureFlag.Rules) {
-					continue
+				if rule.IsTargetDeliveryType() {
+					return nil, &rule, false
 				}
-				shouldSaveVariation := variation != nil && rule.IsExperimentType()
-				return variation, &rule, shouldSaveVariation
+
+				// Disable saving in variation storage (uncommented if you need use variation storage)
+				// if return true as third argument the variation will be saved
+				// shouldSaveVariation := variation != nil && rule.IsExperimentType()
+				// return variation, &rule, shouldSaveVariation
 			}
 		}
 	}
@@ -509,7 +531,7 @@ func (c *Client) IsFeatureActive(visitorCode string, featureKey string) (bool, e
 // returns ErrFeatureConfigNotFound error
 // returns ErrVariationNotFound error
 func (c *Client) GetFeatureAllVariables(featureKey string, variationKey string) (map[string]interface{}, error) {
-	featureFlag, err := c.findFeatureFlagV2(featureKey) //find feature flag else throw ErrFeatureConfigNotFound error
+	featureFlag, err := c.getFeatureFlag(featureKey) //find feature flag else throw ErrFeatureConfigNotFound error
 	if err != nil {
 		return nil, newErrFeatureConfigNotFound(featureKey)
 	}
@@ -590,14 +612,14 @@ func parseFeatureVariableV2(variable *types.Variable) interface{} {
 // 	return value
 // }
 
-// The RetrieveDataFromRemoteSource method allows you to retrieve data (according to a key passed as
+// The GetRemoteData method allows you to retrieve data (according to a key passed as
 // argument)stored on a remote Kameleoon server. Usually data will be stored on our remote servers
 // via the use of our Data API. This method, along with the availability of our highly scalable servers
 // for this purpose, provides a convenient way to quickly store massive amounts of data that
 // can be later retrieved for each of your visitors / users.
 //
 // returns Network timeout error
-func (c *Client) RetrieveDataFromRemoteSource(key string, timeout ...time.Duration) ([]byte, error) {
+func (c *Client) GetRemoteData(key string, timeout ...time.Duration) ([]byte, error) {
 	r := request{
 		URL:          c.buildAPIDataPath(key),
 		Method:       MethodGet,
@@ -627,6 +649,11 @@ func (c *Client) RetrieveDataFromRemoteSource(key string, timeout ...time.Durati
 	}
 
 	return data, nil
+}
+
+// Deprecated: Please use `GetRemoteData`
+func (c *Client) RetrieveDataFromRemoteSource(key string, timeout ...time.Duration) ([]byte, error) {
+	return c.GetRemoteData(key, timeout...)
 }
 
 func (c *Client) buildAPIDataPath(key string) string {
@@ -675,8 +702,18 @@ func (c *Client) buildAPIDataPath(key string) string {
 // 	return flag, nil
 // }
 
-func (c *Client) findFeatureFlagV2(featureKey string) (configuration.FeatureFlagV2, error) {
-	var flag configuration.FeatureFlagV2
+func (c *Client) getExperiment(id int) (configuration.Experiment, error) {
+	c.m.Lock()
+	defer c.m.Unlock()
+	for _, ex := range c.experiments {
+		if ex.ID == id {
+			return ex, nil
+		}
+	}
+	return configuration.Experiment{}, newErrExperimentConfigNotFound(utils.WriteUint(id))
+}
+
+func (c *Client) getFeatureFlag(featureKey string) (configuration.FeatureFlagV2, error) {
 	c.m.Lock()
 	defer c.m.Unlock()
 	for _, featureFlag := range c.featureFlagsV2 {
@@ -684,32 +721,8 @@ func (c *Client) findFeatureFlagV2(featureKey string) (configuration.FeatureFlag
 			return featureFlag, nil
 		}
 	}
-	return flag, newErrFeatureConfigNotFound(featureKey)
+	return configuration.FeatureFlagV2{}, newErrFeatureConfigNotFound(featureKey)
 }
-
-// func (c *Client) GetExperiment(id int) *configuration.Experiment {
-// 	c.m.Lock()
-// 	for i, ex := range c.experiments {
-// 		if ex.ID == id {
-// 			c.m.Unlock()
-// 			return &c.experiments[i]
-// 		}
-// 	}
-// 	c.m.Unlock()
-// 	return nil
-// }
-
-// func (c *Client) GetFeatureFlag(id int) *configuration.FeatureFlag {
-// 	c.m.Lock()
-// 	for i, ff := range c.featureFlags {
-// 		if ff.ID == id {
-// 			c.m.Unlock()
-// 			return &c.featureFlags[i]
-// 		}
-// 	}
-// 	c.m.Unlock()
-// 	return nil
-// }
 
 func (c *Client) log(format string, args ...interface{}) {
 	if !c.Cfg.VerboseMode {

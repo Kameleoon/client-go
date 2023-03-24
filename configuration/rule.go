@@ -23,11 +23,11 @@ func (r *Rule) UnmarshalJSON(data []byte) error {
 }
 
 func (r *Rule) GetVariationByHash(hashDouble float64) *types.VariationByExposition {
-	total := 0.0
-	for _, element := range r.VariationByExposition {
-		total += element.Exposition
-		if total >= hashDouble {
-			return &element
+	threshold := hashDouble
+	for _, varByExp := range r.VariationByExposition {
+		threshold -= varByExp.Exposition
+		if threshold < 0 {
+			return &varByExp
 		}
 	}
 	return nil
