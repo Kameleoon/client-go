@@ -117,7 +117,7 @@ func (c *Client) buildTrackingPath(base string, r trackingRequest) string {
 		b.WriteString("&visitorCode=")
 		b.WriteString(r.VisitorCode)
 		b.WriteString("&experimentID=")
-		b.WriteString(utils.WriteUint(r.ExperimentID))
+		b.WriteString(utils.WritePositiveInt(r.ExperimentID))
 		if r.VariationID < 0 {
 			return b.String()
 		}

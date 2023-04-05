@@ -24,7 +24,7 @@ func NewSegment(s *types.Segment) *Segment {
 func (s Segment) String() string {
 	var b strings.Builder
 	b.WriteString("\nSegment id: ")
-	b.WriteString(utils.WriteUint(s.ID))
+	b.WriteString(utils.WritePositiveInt(s.ID))
 	b.WriteByte('\n')
 	tree := s.Tree.String()
 	b.WriteString(tree)

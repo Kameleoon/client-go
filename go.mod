@@ -8,5 +8,6 @@ require (
 	github.com/cristalhq/aconfig/aconfigyaml v0.12.0
 	github.com/segmentio/encoding v0.2.17
 	github.com/stretchr/testify v1.7.0
+	github.com/subchord/go-sse v1.0.7
 	github.com/valyala/fasthttp v1.34.0
 )

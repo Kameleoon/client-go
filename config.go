@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Kameleoon/client-go/v2/logging"
 	"github.com/cristalhq/aconfig"
 	"github.com/cristalhq/aconfig/aconfigyaml"
 )
@@ -20,19 +21,19 @@ const (
 
 type Config struct {
 	Network              NetworkConfig
-	Logger               Logger        `yml:"-" yaml:"-"`
-	SiteCode             string        `yml:"site_code" yaml:"site_code"`
-	TrackingURL          string        `yml:"tracking_url" yaml:"tracking_url" default:"https://api-ssx.kameleoon.com"`
-	ProxyURL             string        `yml:"proxy_url" yaml:"proxy_url"`
-	ClientID             string        `yml:"client_id" yaml:"client_id"`
-	ClientSecret         string        `yml:"client_secret" yaml:"client_secret"`
-	Version              string        `yml:"version" yaml:"version"`
-	ConfigUpdateInterval time.Duration `yml:"config_update_interval" yaml:"config_update_interval" default:"1h"`
-	Timeout              time.Duration `yml:"timeout" yaml:"timeout" default:"2s"`
-	VisitorDataMaxSize   int           `yml:"visitor_data_max_size" yaml:"visitor_data_max_size"`
-	VerboseMode          bool          `yml:"verbose_mode" yaml:"verbose_mode"`
-	Environment          string        `yml:"environment" yaml:"environment"`
-	UserAgentMaxSize     int           `yml:"-" yaml:"-"`
+	Logger               logging.Logger `yml:"-" yaml:"-"`
+	SiteCode             string         `yml:"site_code" yaml:"site_code"`
+	TrackingURL          string         `yml:"tracking_url" yaml:"tracking_url" default:"https://api-ssx.kameleoon.com"`
+	ProxyURL             string         `yml:"proxy_url" yaml:"proxy_url"`
+	ClientID             string         `yml:"client_id" yaml:"client_id"`
+	ClientSecret         string         `yml:"client_secret" yaml:"client_secret"`
+	Version              string         `yml:"version" yaml:"version"`
+	ConfigUpdateInterval time.Duration  `yml:"config_update_interval" yaml:"config_update_interval" default:"1h"`
+	Timeout              time.Duration  `yml:"timeout" yaml:"timeout" default:"2s"`
+	VisitorDataMaxSize   int            `yml:"visitor_data_max_size" yaml:"visitor_data_max_size"`
+	VerboseMode          bool           `yml:"verbose_mode" yaml:"verbose_mode"`
+	Environment          string         `yml:"environment" yaml:"environment"`
+	UserAgentMaxSize     int            `yml:"-" yaml:"-"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -41,9 +42,6 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 func (c *Config) defaults() {
-	if c.Logger == nil {
-		c.Logger = defaultLogger
-	}
 	if len(c.TrackingURL) == 0 {
 		c.TrackingURL = API_SSX_URL
 	}
@@ -66,6 +64,17 @@ func (c *Config) defaults() {
 		c.UserAgentMaxSize = DefaultUserAgentMaxSize
 	}
 	c.Network.defaults(c.Version)
+	if c.Logger == nil {
+		c.defaultLogger()
+	}
+}
+
+func (c *Config) defaultLogger() {
+	loggerMode := logging.Silent
+	if c.VerboseMode {
+		loggerMode = logging.Verbose
+	}
+	c.Logger = logging.NewLogger(loggerMode, logging.DefaultLogger)
 }
 
 func (c *Config) Load(path string) error {

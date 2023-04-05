@@ -5,7 +5,7 @@ import (
 )
 
 type FeatureFlagV2 struct {
-	ID                  int                 `json:"id"`
+	Id                  int                 `json:"id"`
 	FeatureKey          string              `json:"featureKey"`
 	Variations          []types.VariationV2 `json:"variations"`
 	DefaultVariationKey string              `json:"defaultVariationKey"`

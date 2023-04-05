@@ -46,15 +46,11 @@ func parseUintBuf(b string) (int, int, error) {
 	return v, n, nil
 }
 
-func WriteUint(n int) string {
-	if n < 0 {
-		return ""
-	}
-
+func WriteUint(n uint) string {
 	var b [20]byte
 	buf := b[:]
 	i := len(buf)
-	var q int
+	var q uint
 	for n >= 10 {
 		i--
 		q = n / 10
@@ -69,3 +65,9 @@ func WriteUint(n int) string {
 	return s.String()
 }
 
+func WritePositiveInt(n int) string {
+	if n < 0 {
+		return ""
+	}
+	return WriteUint(uint(n))
+}

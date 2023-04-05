@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Kameleoon/client-go/v2/configuration"
+	"github.com/Kameleoon/client-go/v2/hybrid"
 	"github.com/Kameleoon/client-go/v2/storage"
 	"github.com/Kameleoon/client-go/v2/types"
 	"github.com/Kameleoon/client-go/v2/utils"
@@ -16,7 +17,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-const SDKVersion = "2.0.6"
+const SDKVersion = "2.1.0"
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
@@ -32,27 +33,40 @@ type Client struct {
 	Data             *hashmap.HashMap
 	Cfg              *Config
 	network          networkClient
-	variationStorage *storage.VariationStorage
+	variationStorage storage.VariationStorage
+	hybridManager    hybrid.HybridManager
 
-	m, mUA      sync.Mutex
-	init        bool
-	initError   error
-	token       string
-	experiments []configuration.Experiment
-	// featureFlags   []configuration.FeatureFlag
-	featureFlagsV2 []configuration.FeatureFlagV2
-	userAgents     map[string]types.UserAgent
+	m, mUA                     sync.Mutex
+	init                       bool
+	initError                  error
+	token                      string
+	experiments                []configuration.Experiment
+	featureFlagsV2             []configuration.FeatureFlagV2
+	userAgents                 map[string]types.UserAgent
+	configurationUpdateService configuration.ConfigurationUpdateService
+	updateConfigurationHandler func()
 }
 
 func NewClient(cfg *Config) *Client {
 	cfg.defaults()
+
+	hybridManager, errHybrid := hybrid.NewHybridManagerImpl(5*time.Second,
+		&storage.CacheFactoryImpl{}, cfg.Logger)
+
 	c := &Client{
 		Cfg:              cfg,
 		network:          newNetworkClient(&cfg.Network),
 		variationStorage: storage.NewVariationStorage(),
 		Data:             new(hashmap.HashMap),
 		userAgents:       make(map[string]types.UserAgent),
+		hybridManager:    hybridManager,
 	}
+
+	if errHybrid != nil {
+		c.log("HybridManager isn't initialized properly, " +
+			"GetEngineTrackingCode method isn't available for call")
+	}
+
 	go c.updateConfig()
 	return c
 }
@@ -119,6 +133,8 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int) (int, e
 	if shouldSave {
 		c.variationStorage.UpdateVariation(visitorCode, ex.ID, *variationId)
 	}
+
+	c.addTrackingVariation(visitorCode, experimentID, variationId)
 
 	req := trackingRequest{
 		Type:          TrackingRequestExperiment,
@@ -294,7 +310,7 @@ func (c *Client) GetVariationAssociatedData(variationID int) ([]byte, error) {
 		}
 	}
 	c.m.Unlock()
-	return nil, newErrVariationNotFound(utils.WriteUint(variationID))
+	return nil, newErrVariationNotFound(utils.WriteUint(uint(variationID)))
 }
 
 // REMOVE LATER
@@ -392,8 +408,9 @@ func (c *Client) getFeatureVariationKey(visitorCode string, featureKey string) (
 		c.sendTrackingRequest(visitorCode, variation, rule)
 		// save variationId to variation storage if it wasn't saved before
 		if shouldSave && variation.VariationID != nil {
-			c.variationStorage.UpdateVariation(visitorCode, *rule.ExperimentID, *variation.VariationID)
+			c.variationStorage.UpdateVariation(visitorCode, rule.ExperimentId, *variation.VariationID)
 		}
+		c.addTrackingVariation(visitorCode, rule.ExperimentId, variation.VariationID)
 	}
 	return &featureFlag, variationKey, nil
 }
@@ -413,11 +430,9 @@ func (c *Client) calculateVariationKey(varByExp *types.VariationByExposition,
 func (c *Client) getVariationRuleForFeature(visitorCode string, featureFlag *configuration.FeatureFlagV2) (*types.VariationByExposition, *configuration.Rule, bool) {
 	// no rules -> return DefaultVariationKey
 	if len(featureFlag.Rules) > 0 {
-		//uses for variation's expositions
-		hashVariation := getHashDoubleV2(visitorCode, featureFlag.ID, "variation")
 		for _, rule := range featureFlag.Rules {
 			//check if visitor is targeted for rule, else next rule
-			if c.checkTargeting(visitorCode, featureFlag.ID, &rule) {
+			if c.checkTargeting(visitorCode, featureFlag.Id, &rule) {
 
 				// Disable searching in variation storage (uncommented if you need use variation storage)
 				// chech for saved variation for rule if it's experimentation rule
@@ -426,10 +441,11 @@ func (c *Client) getVariationRuleForFeature(visitorCode string, featureFlag *con
 				// }
 
 				//uses for rule exposition
-				hashRule := getHashDoubleV2(visitorCode, featureFlag.ID, strconv.Itoa(rule.Order))
-
+				hashRule := getHashDoubleRule(visitorCode, rule.Id, rule.RespoolTime)
 				//check main expostion for rule with hashRule
 				if hashRule < rule.Exposition {
+					//uses for variation's expositions
+					hashVariation := getHashDoubleRule(visitorCode, rule.ExperimentId, rule.RespoolTime)
 					// get variation with new hashVariation
 					variation := rule.GetVariationByHash(hashVariation)
 					shouldSaveVariation := variation != nil
@@ -438,7 +454,6 @@ func (c *Client) getVariationRuleForFeature(visitorCode string, featureFlag *con
 				// need to take next rule if:
 				// 1. Variation is not defined
 				// 2. Type of current is EXPERIMENTATION
-				// 3. Current rule is not the latest rule in order
 				if rule.IsTargetDeliveryType() {
 					return nil, &rule, false
 				}
@@ -454,8 +469,8 @@ func (c *Client) getVariationRuleForFeature(visitorCode string, featureFlag *con
 }
 
 func (c *Client) getSavedVariationForRule(visitorCode string, rule *configuration.Rule) (*types.VariationByExposition, bool) {
-	if rule != nil && rule.IsExperimentType() && rule.ExperimentID != nil {
-		if savedVariationId, exist := c.variationStorage.GetVariationId(visitorCode, *rule.ExperimentID); exist {
+	if (rule != nil) && rule.IsExperimentType() && (rule.ExperimentId != 0) {
+		if savedVariationId, exist := c.variationStorage.GetVariationId(visitorCode, rule.ExperimentId); exist {
 			return rule.GetVariation(savedVariationId), true
 		}
 	}
@@ -464,7 +479,7 @@ func (c *Client) getSavedVariationForRule(visitorCode string, rule *configuratio
 
 // sendTrackingRequest is a helper method for sending tracking requests for new FF v2
 func (c *Client) sendTrackingRequest(visitorCode string, variation *types.VariationByExposition, rule *configuration.Rule) {
-	if rule.ExperimentID != nil {
+	if rule.ExperimentId != 0 {
 		variationId := 0
 		if variation != nil && variation.VariationID != nil {
 			variationId = *variation.VariationID
@@ -472,7 +487,7 @@ func (c *Client) sendTrackingRequest(visitorCode string, variation *types.Variat
 		req := trackingRequest{
 			Type:          TrackingRequestExperiment,
 			VisitorCode:   visitorCode,
-			ExperimentID:  *rule.ExperimentID,
+			ExperimentID:  rule.ExperimentId,
 			UserAgent:     c.getUserAgent(visitorCode),
 			VariationID:   variationId,
 			NoneVariation: variation == nil,
@@ -666,42 +681,6 @@ func (c *Client) buildAPIDataPath(key string) string {
 	return url.String()
 }
 
-// func (c *Client) findFeatureFlag(featureKey interface{}) (configuration.FeatureFlag, error) {
-// 	var flag configuration.FeatureFlag
-
-// 	c.m.Lock()
-// 	switch key := featureKey.(type) {
-// 	case string:
-// 		for i, featureFlag := range c.featureFlags {
-// 			if featureFlag.IdentificationKey == key {
-// 				flag = featureFlag
-// 				break
-// 			}
-// 			if i == len(c.featureFlags)-1 {
-// 				c.m.Unlock()
-// 				return flag, newErrFeatureConfigNotFound(key)
-// 			}
-// 		}
-// 	case int:
-// 		for i, featureFlag := range c.featureFlags {
-// 			if featureFlag.ID == key {
-// 				flag = featureFlag
-// 				break
-// 			}
-// 			if i == len(c.featureFlags)-1 {
-// 				c.m.Unlock()
-// 				return flag, newErrFeatureConfigNotFound(strconv.Itoa(key))
-// 			}
-// 		}
-// 	default:
-// 		c.m.Unlock()
-// 		return flag, ErrInvalidFeatureKeyType
-// 	}
-// 	c.m.Unlock()
-
-// 	return flag, nil
-// }
-
 func (c *Client) getExperiment(id int) (configuration.Experiment, error) {
 	c.m.Lock()
 	defer c.m.Unlock()
@@ -710,7 +689,7 @@ func (c *Client) getExperiment(id int) (configuration.Experiment, error) {
 			return ex, nil
 		}
 	}
-	return configuration.Experiment{}, newErrExperimentConfigNotFound(utils.WriteUint(id))
+	return configuration.Experiment{}, newErrExperimentConfigNotFound(utils.WritePositiveInt(id))
 }
 
 func (c *Client) getFeatureFlag(featureKey string) (configuration.FeatureFlagV2, error) {
@@ -725,13 +704,6 @@ func (c *Client) getFeatureFlag(featureKey string) (configuration.FeatureFlagV2,
 }
 
 func (c *Client) log(format string, args ...interface{}) {
-	if !c.Cfg.VerboseMode {
-		return
-	}
-	if len(args) == 0 {
-		c.Cfg.Logger.Printf(format)
-		return
-	}
 	c.Cfg.Logger.Printf(format, args...)
 }
 
@@ -771,30 +743,32 @@ func (c *Client) fetchToken() error {
 }
 
 func (c *Client) updateConfig() {
-	c.log("Start-up, fetching is starting")
-	err := c.fetchConfig()
+	err := c.configurationUpdateService.Start(c.Cfg.ConfigUpdateInterval, c.Cfg.SiteCode, c.fetchConfig, nil, c.Cfg.Logger)
 	c.m.Lock()
 	c.init = true
 	c.initError = err
 	c.m.Unlock()
-	ticker := time.NewTicker(c.Cfg.ConfigUpdateInterval)
-	c.log("Scheduled job to fetch configuration is starting")
-	for range ticker.C {
-		c.fetchConfig()
-	}
 }
 
-func (c *Client) fetchConfig() error {
+func (c *Client) OnUpdateConfiguration(handler func()) {
+	c.updateConfigurationHandler = handler
+}
+
+func (c *Client) fetchConfig(ts int64) error {
 	// if err := c.fetchToken(); err != nil {
 	// 	return err
 	// }
 
-	if clientConfig, err := c.requestClientConfig(c.Cfg.SiteCode); err == nil {
+	if clientConfig, err := c.requestClientConfig(c.Cfg.SiteCode, ts); err == nil {
 		c.m.Lock()
+		c.configurationUpdateService.UpdateSettings(clientConfig.Settings)
 		c.experiments = clientConfig.Experiments
 		// c.featureFlags = clientConfig.FeatureFlags
 		c.featureFlagsV2 = clientConfig.FeatureFlagsV2
 		c.m.Unlock()
+		if ts != -1 {
+			c.updateConfigurationHandler()
+		}
 		return nil
 	} else {
 		c.log("Failed to fetch: %v", err)
@@ -802,10 +776,14 @@ func (c *Client) fetchConfig() error {
 	}
 }
 
-func (c *Client) requestClientConfig(siteCode string) (configuration.Configuration, error) {
-	c.log("Fetching Configuration")
+func (c *Client) requestClientConfig(siteCode string, ts int64) (configuration.Configuration, error) {
+	if ts == -1 {
+		c.log("Fetching configuration")
+	} else {
+		c.log("Fetching configuration for TS:%v", ts)
+	}
 	var campaigns configuration.Configuration
-	uri, err := c.buildFetchPathClientConfig(API_CLIENT_CONFIG_URL, c.Cfg.SiteCode, c.Cfg.Environment)
+	uri, err := c.buildFetchPathClientConfig(API_CLIENT_CONFIG_URL, c.Cfg.SiteCode, c.Cfg.Environment, ts)
 	if err != nil {
 		return campaigns, err
 	}
@@ -839,7 +817,8 @@ func (c *Client) requestClientConfig(siteCode string) (configuration.Configurati
 	return campaigns, err
 }
 
-func (c *Client) buildFetchPathClientConfig(base string, siteCode string, environment string) (string, error) {
+func (c *Client) buildFetchPathClientConfig(
+	base string, siteCode string, environment string, ts int64) (string, error) {
 	var buf strings.Builder
 	buf.WriteString(base)
 	buf.WriteString("/mobile")
@@ -858,6 +837,9 @@ func (c *Client) buildFetchPathClientConfig(base string, siteCode string, enviro
 	addValue("siteCode", siteCode)
 	if len(environment) > 0 {
 		addValue("environment", environment)
+	}
+	if ts != -1 {
+		addValue("ts", strconv.FormatInt(ts, 10))
 	}
 	return buf.String(), nil
 }
@@ -934,7 +916,7 @@ func (c *Client) GetExperimentList() []int {
 	defer c.m.Unlock()
 	arrayIds := make([]int, 0, len(c.experiments))
 	for _, exp := range c.experiments {
-		arrayIds = append(arrayIds, exp.ID)
+		arrayIds = append(arrayIds, int(exp.ID))
 	}
 	return arrayIds
 }
@@ -995,4 +977,18 @@ func (c *Client) GetActiveFeatureListForVisitor(visitorCode string) ([]string, e
 		}
 	}
 	return arrayIds, nil
+}
+
+func (c *Client) GetEngineTrackingCode(visitorCode string) string {
+	if c.hybridManager == nil {
+		c.log("HybridManager wasn't initialized properly. GetEngineTrackingCode method isn't avaiable")
+		return ""
+	}
+	return c.hybridManager.GetEngineTrackingCode(visitorCode)
+}
+
+func (c *Client) addTrackingVariation(visitorCode string, experimentId int, variationId *int) {
+	if c.hybridManager != nil && variationId != nil {
+		c.hybridManager.AddVariation(visitorCode, experimentId, *variationId)
+	}
 }

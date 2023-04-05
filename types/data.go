@@ -175,7 +175,7 @@ type Browser struct {
 func (b Browser) QueryEncode() string {
 	var sb strings.Builder
 	sb.WriteString("eventType=staticData&browserIndex=")
-	sb.WriteString(utils.WriteUint(int(b.Type)))
+	sb.WriteString(utils.WritePositiveInt(int(b.Type)))
 	sb.WriteString("&nonce=")
 	sb.WriteString(GetNonce())
 	return sb.String()
@@ -246,7 +246,7 @@ type Conversion struct {
 func (c Conversion) QueryEncode() string {
 	var b strings.Builder
 	b.WriteString("eventType=conversion&goalId=")
-	b.WriteString(utils.WriteUint(c.GoalID))
+	b.WriteString(utils.WritePositiveInt(c.GoalID))
 	b.WriteString("&revenue=")
 	b.WriteString(strconv.FormatFloat(c.Revenue, 'f', -1, 64))
 	b.WriteString("&negative=")

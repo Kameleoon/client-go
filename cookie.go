@@ -101,14 +101,18 @@ func getHashDouble(visitorCode string, containerID int, respoolTime []types.Resp
 	return getHashDoubleSuffix(visitorCode, containerID, respoolTime, "")
 }
 
-func getHashDoubleV2(visitorCode string, containerID int, suffix string) float64 {
+func getHashDoubleRule(visitorCode string, containerID int, respoolTime int) float64 {
+	suffix := ""
+	if respoolTime > 0 {
+		suffix = strconv.Itoa(respoolTime)
+	}
 	return getHashDoubleSuffix(visitorCode, containerID, nil, suffix)
 }
 
 func getHashDoubleSuffix(visitorCode string, containerID int, respoolTime []types.RespoolTime, suffix string) float64 {
 	var b []byte
 	b = append(b, visitorCode...)
-	b = append(b, utils.WriteUint(containerID)...)
+	b = append(b, utils.WritePositiveInt(containerID)...)
 	b = append(b, suffix...)
 
 	vals := make([]float64, len(respoolTime))
