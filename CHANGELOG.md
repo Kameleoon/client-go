@@ -3,8 +3,9 @@ All notable changes to this project will be documented in this file.
 
 ## 2.1.0 - 2023-04-05
 * Added update campaigns and feature flag configurations instantaneously with Real-Time Streaming Architecture: [`Documentation`](https://developers.kameleoon.com/go-sdk.html#streaming) or [`Product Updates`](https://www.kameleoon.com/en/blog/real-time-streaming)
-* Added a new method [`OnUpdateConfiguration`](https://developers.kameleoon.com/go-sdk.html#onupdateconfiguration) to handle events when configuration data is updated in real time
-* Added a new method [`GetEngineTrackingCode`](https://developers.kameleoon.com/go-sdk.html#GetEngineTrackingCode) which can be used to simplify utilization of hybrid mode
+* Added a new methods:
+    - [`OnUpdateConfiguration`](https://developers.kameleoon.com/go-sdk.html#onupdateconfiguration) to handle events when configuration data is updated in real time
+    - [`GetEngineTrackingCode`](https://developers.kameleoon.com/go-sdk.html#GetEngineTrackingCode) which can be used to simplify utilization of hybrid mode
 * Minor bug fixes
 
 ## 2.0.6 - 2023-03-24
