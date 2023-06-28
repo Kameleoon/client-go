@@ -172,6 +172,20 @@ func getCondition(c types.TargetingCondition) types.Condition {
 	switch c.GetType() {
 	case types.TargetingCustomDatum:
 		return conditions.NewCustomDatum(c)
+	case types.TargetingBrowser:
+		return conditions.NewBrowserCondition(c)
+	case types.TargetingDeviceType:
+		return conditions.NewDeviceCondition(c)
+	case types.TargetingVisitorCode:
+		return conditions.NewVisitorCodeCondition(c)
+	case types.TargetingSDKLanguage:
+		return conditions.NewSdkLanguageCondition(c)
+	case types.TargetingPageTitle:
+		return conditions.NewPageTitleCondition(c)
+	case types.TargetingPageUrl:
+		return conditions.NewPageUrlCondition(c)
+	case types.TargetingConversions:
+		return conditions.NewConversionCondition(c)
 	case types.TargetingTargetExperiment:
 		return conditions.NewTargetExperiment(c)
 	case types.TargetingExclusiveExperiment:

@@ -6,15 +6,25 @@ import (
 	"time"
 )
 
+// Represents a container type that is supposed to store relevant values by distinct keys
+// and to manage relevance of the stored values
 type Cache interface {
+	// If item stored by specified key exists, this method updates its value and its relevance,
+	// otherwise this method creates new relevant item with specified key and value.
 	Set(key interface{}, value interface{}, expiration ...time.Duration)
+	// Get a value of item by specified key, return an item and bool indicating if value exists
 	Get(key string) (interface{}, bool)
 
+	// Removes all stored values.
 	Clear()
+	// Number of items stored.
 	Len() int
 
+	// Returns all keys of stored items (even expired)
 	Keys() []interface{}
+	// Returns all values of stored items (even expired)
 	Values() []interface{}
+	// Returns map of actual keys of stored items (only non-expired)
 	ActualValues() map[interface{}]interface{}
 }
 
@@ -92,7 +102,7 @@ func (c *CacheImpl) Get(key string) (interface{}, bool) {
 	return nil, false
 }
 
-// return all stored keys (even expired)
+// Return all stored keys (even expired)
 func (c *CacheImpl) Keys() []interface{} {
 	c.Lock()
 	defer c.Unlock()
@@ -105,7 +115,7 @@ func (c *CacheImpl) Keys() []interface{} {
 	return keys
 }
 
-// return all stored values (even expired)
+// Return all stored values (even expired)
 func (c *CacheImpl) Values() []interface{} {
 	c.Lock()
 	defer c.Unlock()
@@ -118,7 +128,7 @@ func (c *CacheImpl) Values() []interface{} {
 	return values
 }
 
-// returns a map with actual values
+// Returns a map with actual values
 func (c *CacheImpl) ActualValues() map[interface{}]interface{} {
 	c.purge()
 
@@ -131,14 +141,14 @@ func (c *CacheImpl) ActualValues() map[interface{}]interface{} {
 		cacheItem := v.Value.(*cacheItem)
 		if cacheItem.expiration.After(timeNow) {
 			mapValues[k] = cacheItem.value
+		} else {
+			c.list.Remove(v)
+			delete(c.values, k)
 		}
-		c.list.Remove(v)
-		delete(c.values, k)
 	}
 	return mapValues
 }
 
-// return count of values (despite of valid or expired they are)
 func (c *CacheImpl) Len() int {
 	return len(c.values)
 }
@@ -151,7 +161,7 @@ func (c *CacheImpl) Clear() {
 	c.list.Init()
 }
 
-// start ticker for cleainig the data
+// Start ticker for cleainig the data
 func (c *CacheImpl) startCleanup(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -164,7 +174,7 @@ func (c *CacheImpl) startCleanup(interval time.Duration) {
 	}
 }
 
-// purge the expired date from cache
+// Remove the expired items from cache
 func (c *CacheImpl) purge() {
 	c.Lock()
 	defer c.Unlock()

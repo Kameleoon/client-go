@@ -5,14 +5,14 @@ import (
 )
 
 type FeatureFlagV2 struct {
-	Id                  int                 `json:"id"`
-	FeatureKey          string              `json:"featureKey"`
-	Variations          []types.VariationV2 `json:"variations"`
-	DefaultVariationKey string              `json:"defaultVariationKey"`
-	Rules               []Rule              `json:"rules"`
+	Id                  int                          `json:"id"`
+	FeatureKey          string                       `json:"featureKey"`
+	Variations          []types.VariationFeatureFlag `json:"variations"`
+	DefaultVariationKey string                       `json:"defaultVariationKey"`
+	Rules               []Rule                       `json:"rules"`
 }
 
-func (ff FeatureFlagV2) GetVariationByKey(key string) (*types.VariationV2, bool) {
+func (ff FeatureFlagV2) GetVariationByKey(key string) (*types.VariationFeatureFlag, bool) {
 	for _, v := range ff.Variations {
 		if v.Key == key {
 			return &v, true

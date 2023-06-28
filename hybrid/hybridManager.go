@@ -3,6 +3,7 @@ package hybrid
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Kameleoon/client-go/v2/logging"
@@ -10,17 +11,21 @@ import (
 )
 
 const (
-	tcInit                  = "window.kameleoonQueue = window.kameleoonQueue || [];"
+	tcInit                  = "window.kameleoonQueue=window.kameleoonQueue||[];"
 	tcAssignVariationFormat = "window.kameleoonQueue.push(['Experiments.assignVariation',%d,%d]);"
 	tcTriggerFormat         = "window.kameleoonQueue.push(['Experiments.trigger',%d,true]);"
 )
 
+// Represents a tool type that is supposed to manage Hybrid integration.
 type HybridManager interface {
+	// Assigns a variation for an experiment of a visitor.
 	AddVariation(visitorCode string, experimentId int, variationId int)
+	// Generates an Engine Tracking Code based on assigned variations of the specified visitor.
 	GetEngineTrackingCode(visitor string) string
 }
 
 type HybridManagerImpl struct {
+	sync.Mutex
 	expirationTime time.Duration
 	cacheFactory   storage.CacheFactory
 	cache          storage.Cache
@@ -50,6 +55,8 @@ func NewHybridManagerImpl(
 }
 
 func (hm *HybridManagerImpl) AddVariation(visitorCode string, experimentId int, variationId int) {
+	hm.Lock()
+	defer hm.Unlock()
 	// try to find cache and create if not found
 	cache, exist := hm.cache.Get(visitorCode)
 	visitorCache, ok := cache.(storage.Cache)

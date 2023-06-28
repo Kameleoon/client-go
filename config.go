@@ -14,7 +14,7 @@ const (
 	DefaultConfigUpdateInterval = time.Hour
 	DefaultRequestTimeout       = 2 * time.Second
 	DefaultVisitorDataMaxSize   = 500 // 500 mb
-	ClientHeader                = "sdk/go/"
+	ClientHeader                = "sdk/" + SdkLanguage + "/"
 	DefaultEnvironment          = ""
 	DefaultUserAgentMaxSize     = 100_000
 )
@@ -27,7 +27,6 @@ type Config struct {
 	ProxyURL             string         `yml:"proxy_url" yaml:"proxy_url"`
 	ClientID             string         `yml:"client_id" yaml:"client_id"`
 	ClientSecret         string         `yml:"client_secret" yaml:"client_secret"`
-	Version              string         `yml:"version" yaml:"version"`
 	ConfigUpdateInterval time.Duration  `yml:"config_update_interval" yaml:"config_update_interval" default:"1h"`
 	Timeout              time.Duration  `yml:"timeout" yaml:"timeout" default:"2s"`
 	VisitorDataMaxSize   int            `yml:"visitor_data_max_size" yaml:"visitor_data_max_size"`
@@ -54,16 +53,14 @@ func (c *Config) defaults() {
 	if c.VisitorDataMaxSize == 0 {
 		c.VisitorDataMaxSize = DefaultVisitorDataMaxSize
 	}
-	if len(c.Version) == 0 {
-		c.Version = SDKVersion
-	}
+
 	if len(c.Environment) == 0 {
 		c.Environment = DefaultEnvironment
 	}
 	if c.UserAgentMaxSize == 0 {
 		c.UserAgentMaxSize = DefaultUserAgentMaxSize
 	}
-	c.Network.defaults(c.Version)
+	c.Network.defaults(SdkVersion)
 	if c.Logger == nil {
 		c.defaultLogger()
 	}

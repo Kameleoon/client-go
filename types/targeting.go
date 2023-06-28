@@ -60,6 +60,8 @@ const (
 	TargetingTimeSincePreviousVisit TargetingType = "TIME_SINCE_PREVIOUS_VISIT"
 	TargetingTargetExperiment       TargetingType = "TARGET_EXPERIMENT"
 	TargetingExclusiveExperiment    TargetingType = "EXCLUSIVE_EXPERIMENT"
+	TargetingSDKLanguage            TargetingType = "SDK_LANGUAGE"
+	TargetingVisitorCode            TargetingType = "VISITOR_CODE"
 )
 
 type TargetingConfigurationType string
@@ -78,7 +80,7 @@ const (
 	OperatorContains      OperatorType = "CONTAINS"
 	OperatorExact         OperatorType = "EXACT"
 	OperatorAny           OperatorType = "ANY"
-	OperatorMatch         OperatorType = "REGULAR_EXPRESSION"
+	OperatorRegExp        OperatorType = "REGULAR_EXPRESSION"
 	OperatorLower         OperatorType = "LOWER"
 	OperatorEqual         OperatorType = "EQUAL"
 	OperatorGreater       OperatorType = "GREATER"
@@ -87,7 +89,12 @@ const (
 	OperatorIsAmongValues OperatorType = "AMONG_VALUES"
 )
 
-type ExclusiveExperimentTargetedData struct {
+type TargetedDataExclusiveExperiment struct {
 	ExperimentId            int
 	VisitorVariationStorage map[int]int
+}
+
+type TargetedDataSdk struct {
+	Language string
+	Version  string
 }

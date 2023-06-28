@@ -1,6 +1,6 @@
 package types
 
-type Variation struct {
+type VariationExperiment struct {
 	ID         int    `json:"id,string"`
 	CustomJson string `json:"customJson"`
 }

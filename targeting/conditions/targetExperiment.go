@@ -1,23 +1,16 @@
 package conditions
 
 import (
-	"strings"
-
 	"github.com/Kameleoon/client-go/v2/types"
-	"github.com/segmentio/encoding/json"
+	"github.com/Kameleoon/client-go/v2/utils"
 )
 
 func NewTargetExperiment(c types.TargetingCondition) *TargetExperiment {
-	include := false
-	if c.Include != nil {
-		include = *c.Include
-	}
-	if c.IsInclude != nil {
-		include = *c.IsInclude
-	}
 	return &TargetExperiment{
-		Type:         c.Type,
-		Include:      include,
+		TargetingConditionBase: types.TargetingConditionBase{
+			Type:    c.Type,
+			Include: true,
+		},
 		ExperimentId: c.Experiment,
 		VariationId:  c.Variation,
 		Operator:     c.VariationMatchType,
@@ -25,11 +18,10 @@ func NewTargetExperiment(c types.TargetingCondition) *TargetExperiment {
 }
 
 type TargetExperiment struct {
-	Type         types.TargetingType `json:"targetingType"`
-	Operator     types.OperatorType  `json:"variationMatchType"`
-	Include      bool                `json:"include"`
-	ExperimentId int                 `json:"experiment"`
-	VariationId  int                 `json:"variation"`
+	types.TargetingConditionBase
+	Operator     types.OperatorType `json:"variationMatchType"`
+	ExperimentId int                `json:"experiment"`
+	VariationId  int                `json:"variation"`
 }
 
 func (c *TargetExperiment) CheckTargeting(targetData interface{}) bool {
@@ -50,31 +42,5 @@ func (c *TargetExperiment) CheckTargeting(targetData interface{}) bool {
 }
 
 func (c *TargetExperiment) String() string {
-	if c == nil {
-		return ""
-	}
-	b, err := json.Marshal(c)
-	if err != nil {
-		return ""
-	}
-	var s strings.Builder
-	s.Grow(len(b))
-	s.Write(b)
-	return s.String()
-}
-
-func (c TargetExperiment) GetType() types.TargetingType {
-	return c.Type
-}
-
-func (c *TargetExperiment) SetType(t types.TargetingType) {
-	c.Type = t
-}
-
-func (c TargetExperiment) GetInclude() bool {
-	return c.Include
-}
-
-func (c *TargetExperiment) SetInclude(i bool) {
-	c.Include = i
+	return utils.JsonToString(c)
 }

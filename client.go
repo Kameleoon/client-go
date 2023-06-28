@@ -17,7 +17,10 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-const SDKVersion = "2.1.0"
+const (
+	SdkLanguage = "GO"
+	SdkVersion  = "2.1.1" // IMPORTANT!!! SCRIPTS USES THIS VALUE, DO NOT RENAME/FORMAT - ONLY CHANGE VALUE.
+)
 
 const (
 	API_URL                       = "https://api.kameleoon.com"
@@ -108,15 +111,15 @@ func (c *Client) RunWhenReady(cb func(c *Client, err error)) {
 // returns NotTargeted error when visitor is not targeted by the experiment, as the associated targeting segment conditions were not fulfilled.
 // He should see the reference variation
 
-func (c *Client) TriggerExperiment(visitorCode string, experimentID int) (int, error) {
-	return c.triggerExperiment(visitorCode, experimentID)
+func (c *Client) TriggerExperiment(visitorCode string, experimentId int) (int, error) {
+	return c.triggerExperiment(visitorCode, experimentId)
 }
 
-func (c *Client) triggerExperiment(visitorCode string, experimentID int) (int, error) {
+func (c *Client) triggerExperiment(visitorCode string, experimentId int) (int, error) {
 	if _, err := c.validateVisitorCode(visitorCode); err != nil {
 		return -1, err
 	}
-	ex, err := c.getExperiment(experimentID)
+	ex, err := c.getExperiment(experimentId)
 	if err != nil {
 		return -1, err
 	}
@@ -128,13 +131,10 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int) (int, e
 		return -1, newErrNotTargeted(visitorCode)
 	}
 
-	variationId, shouldSave := c.getVariationForExperiment(visitorCode, &ex)
+	variationId := c.calculateVariationForExperiment(visitorCode, &ex)
 	noneVariation := variationId == nil
-	if shouldSave {
-		c.variationStorage.UpdateVariation(visitorCode, ex.ID, *variationId)
-	}
 
-	c.addTrackingVariation(visitorCode, experimentID, variationId)
+	c.saveVariation(visitorCode, &experimentId, variationId)
 
 	req := trackingRequest{
 		Type:          TrackingRequestExperiment,
@@ -155,7 +155,7 @@ func (c *Client) triggerExperiment(visitorCode string, experimentID int) (int, e
 }
 
 // return parameters: first - variationId , second - should to save to variation storage
-func (c *Client) getVariationForExperiment(visitorCode string, exp *configuration.Experiment) (*int, bool) {
+func (c *Client) calculateVariationForExperiment(visitorCode string, exp *configuration.Experiment) *int {
 
 	// Disable searching in variation storage (uncommented if you need use variation storage)
 	// if savedVariationId, exist := c.getValidSavedVariation(visitorCode, exp); exist {
@@ -171,10 +171,10 @@ func (c *Client) getVariationForExperiment(visitorCode string, exp *configuratio
 			// if return true as second argument the variation will be saved
 			// return &deviation.VariationId, true
 
-			return &deviation.VariationId, true
+			return &deviation.VariationId
 		}
 	}
-	return nil, false
+	return nil
 }
 
 // AddData associate various Data to a visitor.
@@ -257,7 +257,7 @@ func (c *Client) trackConversion(visitorCode string, goalID int, revenue ...floa
 	if _, err := c.validateVisitorCode(visitorCode); err != nil {
 		return err
 	}
-	conv := types.Conversion{GoalID: goalID}
+	conv := types.Conversion{GoalId: goalID}
 	if len(revenue) > 0 {
 		conv.Revenue = revenue[0]
 	}
@@ -313,63 +313,6 @@ func (c *Client) GetVariationAssociatedData(variationID int) ([]byte, error) {
 	return nil, newErrVariationNotFound(utils.WriteUint(uint(variationID)))
 }
 
-// REMOVE LATER
-// ActivateFeature activates a feature toggle.
-//
-// This method takes a visitorCode and feature_key (or featureID) as mandatory arguments to check
-// if the specified feature will be active for a given user.
-// If such a user has never been associated with this feature flag, the SDK returns a boolean value randomly
-// (true if the user should have this feature or false if not).
-// If a user with a given visitorCode is already registered with this feature flag, it will detect the previous featureFlag value.
-// You have to make sure that proper error handling is set up in your code as shown in the example to the right to catch potential exceptions.
-//
-// returns ErrFeatureConfigNotFound error
-// returns ErrNotTargeted error
-// returns ErrVisitorCodeNotValid error
-// func (c *Client) ActivateFeature(visitorCode string, featureKey interface{}) (bool, error) {
-// 	return c.activateFeature(visitorCode, featureKey)
-// }
-
-// func (c *Client) activateFeature(visitorCode string, featureKey interface{}) (bool, error) {
-// 	if _, err := c.validateVisitorCode(visitorCode); err != nil {
-// 		return false, err
-// 	}
-// 	ff, err := c.findFeatureFlag(featureKey)
-// 	if err != nil {
-// 		return false, err
-// 	}
-// 	req := trackingRequest{
-// 		Type:         TrackingRequestExperiment,
-// 		VisitorCode:  visitorCode,
-// 		ExperimentID: ff.ID,
-// 		UserAgent:    c.getUserAgent(visitorCode),
-// 	}
-// 	if err := c.checkSiteCodeEnable(&ff); err != nil {
-// 		return false, err
-// 	}
-
-// 	if !c.checkTargeting(visitorCode, ff.ID, ff) {
-// 		return false, newErrNotTargeted(visitorCode)
-// 	}
-
-// 	if !ff.IsScheduleActive() {
-// 		return false, nil
-// 	}
-
-// 	threshold := getHashDouble(visitorCode, ff.ID, nil)
-// 	if threshold >= 1-ff.ExpositionRate {
-// 		if len(ff.Variations) > 0 {
-// 			req.VariationID = ff.Variations[0].ID
-// 		}
-// 		go c.postTrackingAsync(req)
-// 		return true, nil
-// 	}
-// 	req.VariationID = REFERENCE
-// 	req.NoneVariation = true
-// 	go c.postTrackingAsync(req)
-// 	return false, nil
-// }
-
 // GetFeatureVariationKey returns a variation key for visitor code
 //
 // This method takes a visitorCode and featureKey as mandatory arguments and
@@ -395,22 +338,18 @@ func (c *Client) getFeatureVariationKey(visitorCode string, featureKey string) (
 	if err != nil {
 		return nil, string(types.VARIATION_OFF), err
 	}
-	variation, rule, shouldSave := c.getVariationRuleForFeature(visitorCode, &featureFlag)
+	variation, rule := c.calculateVariationRuleForFeature(visitorCode, &featureFlag)
 	// get variation key from feature flag
 	variationKey := c.calculateVariationKey(variation, rule, &featureFlag.DefaultVariationKey)
 
-	// Previous logic when you need to send tracking request only for EXPERIMENTATION rules
-	// if rule != nil && rule.Type == string(types.RuleTypeExperimentation) {
-
-	// Need to send tracking request if EXPERIMENTATION rule
-	// or TARGETED DELIVERY rule if it has variation
-	if rule != nil && (rule.IsExperimentType() || variation != nil) {
-		c.sendTrackingRequest(visitorCode, variation, rule)
-		// save variationId to variation storage if it wasn't saved before
-		if shouldSave && variation.VariationID != nil {
-			c.variationStorage.UpdateVariation(visitorCode, rule.ExperimentId, *variation.VariationID)
+	if rule != nil {
+		var variationId *int
+		if variation != nil {
+			variationId = variation.VariationID
 		}
-		c.addTrackingVariation(visitorCode, rule.ExperimentId, variation.VariationID)
+		c.sendTrackingRequest(visitorCode, &rule.ExperimentId, variationId)
+		// save variationId to variation storage if it wasn't saved before
+		c.saveVariation(visitorCode, &rule.ExperimentId, variationId)
 	}
 	return &featureFlag, variationKey, nil
 }
@@ -427,45 +366,44 @@ func (c *Client) calculateVariationKey(varByExp *types.VariationByExposition,
 }
 
 // getVariationRuleForFeature is a helper method for calculate variation key for feature flag
-func (c *Client) getVariationRuleForFeature(visitorCode string, featureFlag *configuration.FeatureFlagV2) (*types.VariationByExposition, *configuration.Rule, bool) {
+func (c *Client) calculateVariationRuleForFeature(
+	visitorCode string, featureFlag *configuration.FeatureFlagV2) (*types.VariationByExposition, *configuration.Rule) {
 	// no rules -> return DefaultVariationKey
-	if len(featureFlag.Rules) > 0 {
-		for _, rule := range featureFlag.Rules {
-			//check if visitor is targeted for rule, else next rule
-			if c.checkTargeting(visitorCode, featureFlag.Id, &rule) {
+	for _, rule := range featureFlag.Rules {
+		//check if visitor is targeted for rule, else next rule
+		if c.checkTargeting(visitorCode, featureFlag.Id, &rule) {
 
-				// Disable searching in variation storage (uncommented if you need use variation storage)
-				// chech for saved variation for rule if it's experimentation rule
-				// if savedVariation, found := c.getSavedVariationForRule(visitorCode, &rule); found {
-				// 	return savedVariation, &rule, false
-				// }
+			// Disable searching in variation storage (uncommented if you need use variation storage)
+			// check for saved variation for rule if it's experimentation rule
+			// if savedVariation, found := c.getSavedVariationForRule(visitorCode, &rule); found {
+			// 	return savedVariation, &rule, false
+			// }
 
-				//uses for rule exposition
-				hashRule := getHashDoubleRule(visitorCode, rule.Id, rule.RespoolTime)
-				//check main expostion for rule with hashRule
-				if hashRule < rule.Exposition {
-					//uses for variation's expositions
-					hashVariation := getHashDoubleRule(visitorCode, rule.ExperimentId, rule.RespoolTime)
-					// get variation with new hashVariation
-					variation := rule.GetVariationByHash(hashVariation)
-					shouldSaveVariation := variation != nil
-					return variation, &rule, shouldSaveVariation
-				}
-				// need to take next rule if:
-				// 1. Variation is not defined
-				// 2. Type of current is EXPERIMENTATION
+			//uses for rule exposition
+			hashRule := getHashDoubleRule(visitorCode, rule.Id, rule.RespoolTime)
+			//check main expostion for rule with hashRule
+			if hashRule <= rule.Exposition {
 				if rule.IsTargetDeliveryType() {
-					return nil, &rule, false
+					var variation *types.VariationByExposition
+					if len(rule.VariationByExposition) > 0 {
+						variation = &rule.VariationByExposition[0]
+					}
+					return variation, &rule
 				}
-
-				// Disable saving in variation storage (uncommented if you need use variation storage)
-				// if return true as third argument the variation will be saved
-				// shouldSaveVariation := variation != nil && rule.IsExperimentType()
-				// return variation, &rule, shouldSaveVariation
+				//uses for variation's expositions
+				hashVariation := getHashDoubleRule(visitorCode, rule.ExperimentId, rule.RespoolTime)
+				// get variation with new hashVariation
+				variation := rule.GetVariationByHash(hashVariation)
+				if variation != nil {
+					return variation, &rule
+				}
+			}
+			if rule.IsTargetDeliveryType() {
+				break
 			}
 		}
 	}
-	return nil, nil, false
+	return nil, nil
 }
 
 func (c *Client) getSavedVariationForRule(visitorCode string, rule *configuration.Rule) (*types.VariationByExposition, bool) {
@@ -478,19 +416,19 @@ func (c *Client) getSavedVariationForRule(visitorCode string, rule *configuratio
 }
 
 // sendTrackingRequest is a helper method for sending tracking requests for new FF v2
-func (c *Client) sendTrackingRequest(visitorCode string, variation *types.VariationByExposition, rule *configuration.Rule) {
-	if rule.ExperimentId != 0 {
-		variationId := 0
-		if variation != nil && variation.VariationID != nil {
-			variationId = *variation.VariationID
+func (c *Client) sendTrackingRequest(visitorCode string, experimentId *int, variationId *int) {
+	if experimentId != nil {
+		variationOrReferenceId := 0
+		if variationId != nil {
+			variationOrReferenceId = *variationId
 		}
 		req := trackingRequest{
 			Type:          TrackingRequestExperiment,
 			VisitorCode:   visitorCode,
-			ExperimentID:  rule.ExperimentId,
+			ExperimentID:  *experimentId,
 			UserAgent:     c.getUserAgent(visitorCode),
-			VariationID:   variationId,
-			NoneVariation: variation == nil,
+			VariationID:   variationOrReferenceId,
+			NoneVariation: variationId == nil,
 		}
 		go c.postTrackingAsync(req)
 	} else {
@@ -896,15 +834,29 @@ func (c *Client) getConditionData(targetingType types.TargetingType, visitorCode
 	var conditionData interface{}
 	switch targetingType {
 	case types.TargetingCustomDatum:
+		fallthrough
+	case types.TargetingBrowser:
+		fallthrough
+	case types.TargetingDeviceType:
+		fallthrough
+	case types.TargetingPageTitle:
+		fallthrough
+	case types.TargetingConversions:
+		fallthrough
+	case types.TargetingPageUrl:
 		if cell := c.getDataCell(visitorCode); cell != nil {
 			conditionData = cell.Data
 		} else {
 			conditionData = []types.TargetingData{}
 		}
+	case types.TargetingVisitorCode:
+		conditionData = &visitorCode
+	case types.TargetingSDKLanguage:
+		conditionData = &types.TargetedDataSdk{Language: SdkLanguage, Version: SdkVersion}
 	case types.TargetingTargetExperiment:
 		conditionData = c.variationStorage.GetMapSavedVariationId(visitorCode)
 	case types.TargetingExclusiveExperiment:
-		conditionData = &types.ExclusiveExperimentTargetedData{ExperimentId: campaignId,
+		conditionData = &types.TargetedDataExclusiveExperiment{ExperimentId: campaignId,
 			VisitorVariationStorage: c.variationStorage.GetMapSavedVariationId(visitorCode)}
 	}
 	return conditionData
@@ -933,16 +885,14 @@ func (c *Client) GetExperimentListForVisitor(visitorCode string, onlyAllocated b
 	defer c.m.Unlock()
 	arrayIds := make([]int, 0, len(c.experiments))
 	for _, exp := range c.experiments {
-		isTargeted := c.checkTargeting(visitorCode, exp.ID, &exp)
 		// experiment should be only targeted if onlyAllocated == false
 		// experiment should be targeted & has variation if onlyAllocated == true
-		needAppendId := isTargeted && !onlyAllocated
-		if isTargeted && onlyAllocated {
-			if variationId, _ := c.getVariationForExperiment(visitorCode, &exp); variationId != nil {
-				needAppendId = true
+		if c.checkTargeting(visitorCode, exp.ID, &exp) {
+			if onlyAllocated {
+				if variationId := c.calculateVariationForExperiment(visitorCode, &exp); variationId == nil {
+					continue
+				}
 			}
-		}
-		if needAppendId {
 			arrayIds = append(arrayIds, exp.ID)
 		}
 	}
@@ -971,7 +921,7 @@ func (c *Client) GetActiveFeatureListForVisitor(visitorCode string) ([]string, e
 	defer c.m.Unlock()
 	arrayIds := make([]string, 0, len(c.featureFlagsV2))
 	for _, ff := range c.featureFlagsV2 {
-		variation, rule, _ := c.getVariationRuleForFeature(visitorCode, &ff)
+		variation, rule := c.calculateVariationRuleForFeature(visitorCode, &ff)
 		if ff.GetVariationKey(variation, rule) != string(types.VARIATION_OFF) {
 			arrayIds = append(arrayIds, ff.FeatureKey)
 		}
@@ -987,8 +937,11 @@ func (c *Client) GetEngineTrackingCode(visitorCode string) string {
 	return c.hybridManager.GetEngineTrackingCode(visitorCode)
 }
 
-func (c *Client) addTrackingVariation(visitorCode string, experimentId int, variationId *int) {
-	if c.hybridManager != nil && variationId != nil {
-		c.hybridManager.AddVariation(visitorCode, experimentId, *variationId)
+func (c *Client) saveVariation(visitorCode string, experimentId *int, variationId *int) {
+	if experimentId != nil && variationId != nil {
+		if c.hybridManager != nil {
+			c.hybridManager.AddVariation(visitorCode, *experimentId, *variationId)
+		}
+		c.variationStorage.UpdateVariation(visitorCode, *experimentId, *variationId)
 	}
 }

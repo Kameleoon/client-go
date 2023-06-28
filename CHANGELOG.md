@@ -1,6 +1,15 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 2.1.1 - 2023-06-28
+* Added new conditions for targeting:
+    - `Visitor Code`
+    - `SDK Language`
+    - [`Page Title & Page Url`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#pageview)
+    - [`Browser`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#browser)
+    - [`Device`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#device)
+    - [`Conversion`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#trackconversion)
+
 ## 2.1.0 - 2023-04-05
 * Added update campaigns and feature flag configurations instantaneously with Real-Time Streaming Architecture: [`Documentation`](https://developers.kameleoon.com/go-sdk.html#streaming) or [`Product Updates`](https://www.kameleoon.com/en/blog/real-time-streaming)
 * Added a new methods:

@@ -12,34 +12,24 @@ import (
 )
 
 func NewCustomDatum(c types.TargetingCondition) *CustomDatum {
-	include := false
-	if c.Include != nil {
-		include = *c.Include
-	}
-	if c.IsInclude != nil {
-		include = *c.IsInclude
-	}
 	if c.Value == nil {
 		c.Value = ""
 	}
 	return &CustomDatum{
-		Type:     c.Type,
-		Operator: c.Operator,
-		Value:    c.Value,
-		ID:       c.ID,
-		Index:    c.Index,
-		Weight:   c.Weight,
-		Include:  include,
+		TargetingConditionBase: c.TargetingConditionBase,
+		Operator:               c.Operator,
+		Value:                  c.Value,
+		Index:                  c.Index,
+		Include:                c.Include,
 	}
 }
 
 type CustomDatum struct {
+	types.TargetingConditionBase
 	Value    interface{}         `json:"value"`
 	Type     types.TargetingType `json:"targetingType"`
 	Operator types.OperatorType  `json:"valueMatchType"`
-	ID       int                 `json:"id"`
 	Index    string              `json:"customDataIndex"`
-	Weight   int                 `json:"weight"`
 	Include  bool                `json:"include"`
 }
 
@@ -78,17 +68,14 @@ func (c *CustomDatum) checkTargeting(customDataValues []string) bool {
 		return c.contains(customDataValues, func(customDataValue string) bool {
 			return customDataValue == c.Value
 		})
-	case types.OperatorMatch:
+	case types.OperatorRegExp:
 		pattern, ok := c.Value.(string)
 		if !ok {
 			return false
 		}
 		return c.contains(customDataValues, func(customDataValue string) bool {
 			matched, err := regexp.MatchString(pattern, customDataValue)
-			if err == nil && matched {
-				return true
-			}
-			return false
+			return err == nil && matched
 		})
 	case types.OperatorLower, types.OperatorGreater, types.OperatorEqual:
 		var number float64
@@ -157,31 +144,5 @@ func (c *CustomDatum) contains(customDataValues []string, callback func(string) 
 }
 
 func (c *CustomDatum) String() string {
-	if c == nil {
-		return ""
-	}
-	b, err := json.Marshal(c)
-	if err != nil {
-		return ""
-	}
-	var s strings.Builder
-	s.Grow(len(b))
-	s.Write(b)
-	return s.String()
-}
-
-func (c CustomDatum) GetType() types.TargetingType {
-	return c.Type
-}
-
-func (c *CustomDatum) SetType(t types.TargetingType) {
-	c.Type = t
-}
-
-func (c CustomDatum) GetInclude() bool {
-	return c.Include
-}
-
-func (c *CustomDatum) SetInclude(i bool) {
-	c.Include = i
+	return utils.JsonToString(c)
 }

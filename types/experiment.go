@@ -11,12 +11,12 @@ const (
 )
 
 type Experiment struct {
-	ID          int           `json:"id,string"`
-	Name        string        `json:"name"`
-	Status      string        `json:"status,omitempty"`
-	Segment     Segment       `json:"segment,omitempty"`
-	Deviations  []Deviation   `json:"deviations"`
-	RespoolTime []RespoolTime `json:"respoolTime"`
-	Variations  []Variation   `json:"variations"`
-	SiteEnabled bool          `json:"siteEnabled,omitempty"`
+	ID          int                   `json:"id,string"`
+	Name        string                `json:"name"`
+	Status      string                `json:"status,omitempty"`
+	Segment     Segment               `json:"segment,omitempty"`
+	Deviations  []Deviation           `json:"deviations"`
+	RespoolTime []RespoolTime         `json:"respoolTime"`
+	Variations  []VariationExperiment `json:"variations"`
+	SiteEnabled bool                  `json:"siteEnabled,omitempty"`
 }
