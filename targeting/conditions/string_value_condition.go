@@ -31,7 +31,7 @@ func (c *StringValueCondition) checkTargeting(value *string) bool {
 		matched, err := regexp.MatchString(c.Value, *value)
 		return err == nil && matched
 	default:
-		fmt.Printf("unexpected comparing operation for %v condition: %v\n", c.ConditionType, c.MatchType)
+		fmt.Printf("unexpected comparing operation for %v condition: %v\n", c.TargetingConditionBase.Type, c.MatchType)
 		return false
 	}
 }

@@ -1,33 +1,26 @@
 package kameleoon
 
 import (
-	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Kameleoon/client-go/v2/configuration"
 	"github.com/Kameleoon/client-go/v2/hybrid"
+	"github.com/Kameleoon/client-go/v2/network"
 	"github.com/Kameleoon/client-go/v2/storage"
 	"github.com/Kameleoon/client-go/v2/types"
 	"github.com/Kameleoon/client-go/v2/utils"
 	"github.com/cornelk/hashmap"
 	"github.com/segmentio/encoding/json"
-	"github.com/valyala/fasthttp"
 )
 
 const (
 	SdkLanguage = "GO"
-	SdkVersion  = "2.1.1" // IMPORTANT!!! SCRIPTS USES THIS VALUE, DO NOT RENAME/FORMAT - ONLY CHANGE VALUE.
+	SdkVersion  = "2.2.0" // IMPORTANT!!! SCRIPTS USES THIS VALUE, DO NOT RENAME/FORMAT - ONLY CHANGE VALUE.
 )
 
 const (
-	API_URL                       = "https://api.kameleoon.com"
-	API_OAUTH                     = "https://api.kameleoon.com/oauth/token"
-	API_SSX_URL                   = "https://api-ssx.kameleoon.com"
-	API_DATA_URL                  = "https://api-data.kameleoon.com"
-	API_CLIENT_CONFIG_URL         = "https://client-config.kameleoon.com"
 	REFERENCE                     = 0
 	KAMELEOON_VISITOR_CODE_LENGTH = 255
 )
@@ -35,7 +28,7 @@ const (
 type Client struct {
 	Data             *hashmap.HashMap
 	Cfg              *Config
-	network          networkClient
+	networkManager   network.NetworkManager
 	variationStorage storage.VariationStorage
 	hybridManager    hybrid.HybridManager
 
@@ -52,24 +45,29 @@ type Client struct {
 
 func NewClient(cfg *Config) *Client {
 	cfg.defaults()
-
 	hybridManager, errHybrid := hybrid.NewHybridManagerImpl(5*time.Second,
 		&storage.CacheFactoryImpl{}, cfg.Logger)
+	if errHybrid != nil {
+		cfg.Logger.Printf("HybridManager isn't initialized properly, " +
+			"GetEngineTrackingCode method isn't available for call")
+	}
+	np := network.NewNetProviderImpl(cfg.Network.KameleoonClient, cfg.Network.ReadTimeout, cfg.Network.WriteTimeout,
+		cfg.Network.MaxConnsPerHost, cfg.Network.ProxyURL)
+	up := &network.UrlProvider{SiteCode: cfg.SiteCode, DataApiUrl: cfg.dataApiUrl,
+		SdkName: SdkLanguage, SdkVersion: SdkVersion}
+	nm := network.NewNetworkManagerImpl(cfg.Environment, cfg.Timeout, np, up, cfg.Logger)
+	return newClient(cfg, nm, hybridManager)
+}
 
+func newClient(cfg *Config, networkManager network.NetworkManager, hybridManager hybrid.HybridManager) *Client {
 	c := &Client{
 		Cfg:              cfg,
-		network:          newNetworkClient(&cfg.Network),
+		networkManager:   networkManager,
 		variationStorage: storage.NewVariationStorage(),
 		Data:             new(hashmap.HashMap),
 		userAgents:       make(map[string]types.UserAgent),
 		hybridManager:    hybridManager,
 	}
-
-	if errHybrid != nil {
-		c.log("HybridManager isn't initialized properly, " +
-			"GetEngineTrackingCode method isn't available for call")
-	}
-
 	go c.updateConfig()
 	return c
 }
@@ -123,31 +121,22 @@ func (c *Client) triggerExperiment(visitorCode string, experimentId int) (int, e
 	if err != nil {
 		return -1, err
 	}
-
 	if err := c.checkSiteCodeEnable(&ex); err != nil {
 		return -1, err
 	}
-	if !c.checkTargeting(visitorCode, ex.ID, &ex) {
+
+	var variationId *int
+	var noneVariation bool
+	targeted := c.checkTargeting(visitorCode, ex.ID, &ex)
+	if targeted {
+		variationId = c.calculateVariationForExperiment(visitorCode, &ex)
+		noneVariation = variationId == nil
+		c.saveVariation(visitorCode, &ex.ID, variationId)
+	}
+	c.sendTrackingRequest(visitorCode, &ex.ID, variationId)
+	if !targeted {
 		return -1, newErrNotTargeted(visitorCode)
 	}
-
-	variationId := c.calculateVariationForExperiment(visitorCode, &ex)
-	noneVariation := variationId == nil
-
-	c.saveVariation(visitorCode, &experimentId, variationId)
-
-	req := trackingRequest{
-		Type:          TrackingRequestExperiment,
-		VisitorCode:   visitorCode,
-		ExperimentID:  ex.ID,
-		UserAgent:     c.getUserAgent(visitorCode),
-		VariationID:   REFERENCE,
-		NoneVariation: noneVariation,
-	}
-	if !noneVariation {
-		req.VariationID = *variationId
-	}
-	go c.postTrackingAsync(req)
 	if noneVariation {
 		return -1, newErrNotAllocated(visitorCode)
 	}
@@ -275,18 +264,25 @@ func (c *Client) FlushVisitor(visitorCode string) error {
 	if _, err := c.validateVisitorCode(visitorCode); err != nil {
 		return err
 	}
-	go c.postTrackingAsync(trackingRequest{
-		Type:        TrackingRequestData,
-		VisitorCode: visitorCode,
-		UserAgent:   c.getUserAgent(visitorCode),
-	})
+	c.sendTrackingRequest(visitorCode, nil, nil)
 	return nil
 }
 
 func (c *Client) FlushAll() {
 	for kv := range c.Data.Iter() {
-		if visitorCode, ok := kv.Key.(string); ok {
-			c.FlushVisitor(visitorCode)
+		if cell, valueOk := kv.Value.(*types.DataCell); valueOk {
+			if len(cell.Data) == len(cell.Index) {
+				continue
+			}
+			if visitorCode, keyOk := kv.Key.(string); keyOk {
+				unsent, lim := c.selectUnsentData(cell)
+				go func() {
+					sent := c.makeTrackingRequest(visitorCode, unsent, nil, nil)
+					if sent {
+						c.markDataAsSent(cell, lim)
+					}
+				}()
+			}
 		}
 	}
 }
@@ -342,15 +338,17 @@ func (c *Client) getFeatureVariationKey(visitorCode string, featureKey string) (
 	// get variation key from feature flag
 	variationKey := c.calculateVariationKey(variation, rule, &featureFlag.DefaultVariationKey)
 
+	var experimentId *int
+	var variationId *int
 	if rule != nil {
-		var variationId *int
+		experimentId = &rule.ExperimentId
 		if variation != nil {
 			variationId = variation.VariationID
 		}
-		c.sendTrackingRequest(visitorCode, &rule.ExperimentId, variationId)
-		// save variationId to variation storage if it wasn't saved before
-		c.saveVariation(visitorCode, &rule.ExperimentId, variationId)
 	}
+	c.sendTrackingRequest(visitorCode, experimentId, variationId)
+	// save variationId to variation storage if it wasn't saved before
+	c.saveVariation(visitorCode, experimentId, variationId)
 	return &featureFlag, variationKey, nil
 }
 
@@ -413,27 +411,6 @@ func (c *Client) getSavedVariationForRule(visitorCode string, rule *configuratio
 		}
 	}
 	return nil, false
-}
-
-// sendTrackingRequest is a helper method for sending tracking requests for new FF v2
-func (c *Client) sendTrackingRequest(visitorCode string, experimentId *int, variationId *int) {
-	if experimentId != nil {
-		variationOrReferenceId := 0
-		if variationId != nil {
-			variationOrReferenceId = *variationId
-		}
-		req := trackingRequest{
-			Type:          TrackingRequestExperiment,
-			VisitorCode:   visitorCode,
-			ExperimentID:  *experimentId,
-			UserAgent:     c.getUserAgent(visitorCode),
-			VariationID:   variationOrReferenceId,
-			NoneVariation: variationId == nil,
-		}
-		go c.postTrackingAsync(req)
-	} else {
-		c.log("An attempt to send a request with null experimentId was blocked")
-	}
 }
 
 // GetFeatureVariable retrieves a feature variable value from assigned for visitor variation
@@ -573,50 +550,29 @@ func parseFeatureVariableV2(variable *types.Variable) interface{} {
 //
 // returns Network timeout error
 func (c *Client) GetRemoteData(key string, timeout ...time.Duration) ([]byte, error) {
-	r := request{
-		URL:          c.buildAPIDataPath(key),
-		Method:       MethodGet,
-		ContentType:  HeaderContentTypeJson,
-		ClientHeader: c.Cfg.Network.KameleoonClient,
-	}
+	timeoutValue := time.Duration(-1)
 	if len(timeout) > 0 {
-		r.Timeout = timeout[0]
-	} else {
-		r.Timeout = DefaultDoTimeout
+		timeoutValue = timeout[0]
 	}
-	var data []byte
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
+	outChan := make(chan json.RawMessage)
+	errChan := make(chan error)
+	c.log("Retrieve data from remote source (key '%s')", key)
+	c.networkManager.GetRemoteData(key, timeoutValue, outChan, errChan)
+	select {
+	case out := <-outChan:
+		return out, nil
+	case err := <-errChan:
+		if innerErr, isInnerErr := err.(network.ErrUnexpectedResponseStatus); isInnerErr {
+			err = newErrUnexpectedStatusCode(innerErr.Code)
 		}
-		if resp.StatusCode() >= fasthttp.StatusBadRequest {
-			return ErrBadStatus
-		}
-		data = resp.Body()
-		return nil
-	}
-	c.log("Retrieve data from remote source: %v", r)
-	if err := c.network.Do(r, cb); err != nil {
 		c.log("Failed retrieve data from remote source: %v", err)
 		return nil, err
 	}
-
-	return data, nil
 }
 
 // Deprecated: Please use `GetRemoteData`
 func (c *Client) RetrieveDataFromRemoteSource(key string, timeout ...time.Duration) ([]byte, error) {
 	return c.GetRemoteData(key, timeout...)
-}
-
-func (c *Client) buildAPIDataPath(key string) string {
-	var url strings.Builder
-	url.WriteString(API_DATA_URL)
-	url.WriteString("/data?siteCode=")
-	url.WriteString(c.Cfg.SiteCode)
-	url.WriteString("&")
-	url.WriteString(types.EncodeURIComponent("key", key))
-	return url.String()
 }
 
 func (c *Client) getExperiment(id int) (configuration.Experiment, error) {
@@ -651,26 +607,22 @@ type oauthResp struct {
 
 func (c *Client) fetchToken() error {
 	c.log("Fetching bearer token")
-	form := url.Values{
-		"grant_type":    []string{"client_credentials"},
-		"client_id":     []string{c.Cfg.ClientID},
-		"client_secret": []string{c.Cfg.ClientSecret},
-	}
+	outChan := make(chan json.RawMessage)
+	errChan := make(chan error)
+	c.networkManager.FetchBearerToken(c.Cfg.ClientID, c.Cfg.ClientSecret, time.Duration(-1), outChan, errChan)
 	resp := oauthResp{}
-	r := request{
-		Method:      MethodPost,
-		URL:         API_OAUTH,
-		ContentType: HeaderContentTypeForm,
-		BodyString:  form.Encode(),
+	var out json.RawMessage
+	var err error
+	select {
+	case out = <-outChan:
+		err = json.Unmarshal(out, &resp)
+	case err = <-errChan:
 	}
-
-	err := c.network.Do(r, respCallbackJson(&resp))
 	if err != nil {
 		c.log("Failed to fetch bearer token: %v", err)
 		return err
-	} else {
-		c.log("Bearer Token is fetched: %s", resp.Token)
 	}
+	c.log("Bearer Token is fetched: %s", resp.Token)
 	var b strings.Builder
 	b.WriteString("Bearer ")
 	b.WriteString(resp.Token)
@@ -681,7 +633,8 @@ func (c *Client) fetchToken() error {
 }
 
 func (c *Client) updateConfig() {
-	err := c.configurationUpdateService.Start(c.Cfg.ConfigUpdateInterval, c.Cfg.SiteCode, c.fetchConfig, nil, c.Cfg.Logger)
+	url := c.networkManager.GetUrlProvider().MakeRealTimeUrl()
+	err := c.configurationUpdateService.Start(c.Cfg.ConfigUpdateInterval, url, c.fetchConfig, nil, c.Cfg.Logger)
 	c.m.Lock()
 	c.init = true
 	c.initError = err
@@ -721,65 +674,26 @@ func (c *Client) requestClientConfig(siteCode string, ts int64) (configuration.C
 		c.log("Fetching configuration for TS:%v", ts)
 	}
 	var campaigns configuration.Configuration
-	uri, err := c.buildFetchPathClientConfig(API_CLIENT_CONFIG_URL, c.Cfg.SiteCode, c.Cfg.Environment, ts)
-	if err != nil {
-		return campaigns, err
-	}
-	req := request{
-		Method:      MethodGet,
-		URL:         uri,
-		ContentType: HeaderContentTypeJson,
-	}
-	cb := func(resp *fasthttp.Response, err error) error {
-		if err != nil {
-			return err
-		}
-		b := resp.Body()
-		if len(b) == 0 {
-			return ErrEmptyResponse
-		}
-		var res configuration.Configuration
-		err = json.Unmarshal(b, &res)
-		if err != nil {
-			return err
-		}
-		campaigns = res
-		return nil
-	}
-	err = c.network.Do(req, cb)
-	if err != nil {
-		c.log("Failed to fetch: %v, request: %v", err, req)
-	}
-
-	c.log("Configuraiton fetched: %v", campaigns)
-	return campaigns, err
-}
-
-func (c *Client) buildFetchPathClientConfig(
-	base string, siteCode string, environment string, ts int64) (string, error) {
-	var buf strings.Builder
-	buf.WriteString(base)
-	buf.WriteString("/mobile")
-	isFirst := true
-	addValue := func(name string, value string) {
-		if !isFirst {
-			buf.WriteByte('&')
+	outChan := make(chan json.RawMessage)
+	errChan := make(chan error)
+	c.networkManager.FetchConfiguration(ts, time.Duration(-1), outChan, errChan)
+	var out json.RawMessage
+	var err error
+	select {
+	case out = <-outChan:
+		if len(out) == 0 {
+			err = ErrEmptyResponse
 		} else {
-			buf.WriteByte('?')
-			isFirst = false
+			err = json.Unmarshal(out, &campaigns)
 		}
-		buf.WriteString(name)
-		buf.WriteByte('=')
-		buf.WriteString(value)
+	case err = <-errChan:
 	}
-	addValue("siteCode", siteCode)
-	if len(environment) > 0 {
-		addValue("environment", environment)
+	if err == nil {
+		c.log("Configuraiton fetched: %v", campaigns)
+	} else {
+		c.log("Failed to fetch client-config: %v", err)
 	}
-	if ts != -1 {
-		addValue("ts", strconv.FormatInt(ts, 10))
-	}
-	return buf.String(), nil
+	return campaigns, err
 }
 
 func (c *Client) checkSiteCodeEnable(campaign configuration.SiteCodeEnabledInterface) error {

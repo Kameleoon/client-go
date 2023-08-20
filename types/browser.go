@@ -2,8 +2,8 @@ package types
 
 import (
 	"fmt"
-	"strings"
 
+	"github.com/Kameleoon/client-go/v2/network"
 	"github.com/Kameleoon/client-go/v2/utils"
 )
 
@@ -18,22 +18,22 @@ const (
 	BrowserTypeOther   BrowserType = 5
 )
 
+const browserEventType = "staticData"
+
 type Browser struct {
 	Type    BrowserType
 	Version float32
 }
 
 func (b Browser) QueryEncode() string {
-	var sb strings.Builder
-	sb.WriteString("eventType=staticData&browserIndex=")
-	sb.WriteString(utils.WritePositiveInt(int(b.Type)))
+	qb := network.NewQueryBuilder()
+	qb.Append(network.QPEventType, browserEventType)
+	qb.Append(network.QPBrowserIndex, utils.WritePositiveInt(int(b.Type)))
 	if b.Version != 0 {
-		sb.WriteString("&browserVersion=")
-		sb.WriteString(fmt.Sprintf("%g", b.Version))
+		qb.Append(network.QPBrowserVersion, fmt.Sprintf("%f", b.Version))
 	}
-	sb.WriteString("&nonce=")
-	sb.WriteString(GetNonce())
-	return sb.String()
+	qb.Append(network.QPNonce, network.GetNonce())
+	return qb.String()
 }
 
 func (b Browser) DataType() DataType {

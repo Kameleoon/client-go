@@ -1,10 +1,13 @@
 package types
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/Kameleoon/client-go/v2/utils"
+	"github.com/Kameleoon/client-go/v2/network"
 )
+
+const pageViewEventType = "page"
 
 type PageView struct {
 	URL       string
@@ -13,20 +16,19 @@ type PageView struct {
 }
 
 func (v PageView) QueryEncode() string {
-	var b strings.Builder
-	b.WriteString("eventType=page&")
-	b.WriteString(EncodeURIComponent("href", v.URL))
-	b.WriteString("&title=")
-	b.WriteString(v.Title)
+	qb := network.NewQueryBuilder()
+	qb.Append(network.QPEventType, pageViewEventType)
+	qb.Append(network.QPHref, v.URL)
+	qb.Append(network.QPTitle, v.Title)
 	if len(v.Referrers) > 0 {
-		b.WriteString("&referrersIndices=[")
-		b.WriteString(utils.ArrayToString(v.Referrers, ","))
-		b.WriteByte(']')
+		qb.Append(network.QPReferrersIndices, v.encodeReferrers())
 	}
-	b.WriteString("&nonce=")
-	b.WriteString(GetNonce())
+	qb.Append(network.QPNonce, network.GetNonce())
+	return qb.String()
+}
 
-	return b.String()
+func (v PageView) encodeReferrers() string {
+	return strings.ReplaceAll(fmt.Sprint(v.Referrers), " ", ",")
 }
 
 func (v PageView) DataType() DataType {

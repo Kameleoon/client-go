@@ -20,3 +20,7 @@ func JsonToString(o interface{}) string {
 	s.Write(b)
 	return s.String()
 }
+
+func EscapeJsonStringControlSymbols(value string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(value, `\`, `\\`), `"`, `\"`)
+}

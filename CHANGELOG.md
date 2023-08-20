@@ -1,6 +1,9 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 2.2.0 - 2023-08-20
+* Stability and performance improvements
+
 ## 2.1.1 - 2023-06-28
 * Added new conditions for targeting:
     - `Visitor Code`

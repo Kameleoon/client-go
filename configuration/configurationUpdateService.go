@@ -24,11 +24,11 @@ type ConfigurationUpdateService struct {
 	realTimeUpdateChan           chan realtime.RealTimeEvent
 }
 
-func (cus *ConfigurationUpdateService) Start(pollingUpdateInterval time.Duration, siteCode string,
+func (cus *ConfigurationUpdateService) Start(pollingUpdateInterval time.Duration, url string,
 	fetchFunc func(int64) error, sseClientSource func() realtime.SseClient,
 	logger logging.Logger) error {
 	cus.pollingUpdateInterval = pollingUpdateInterval
-	cus.url = "https://events.kameleoon.com:8110/sse?siteCode=" + siteCode
+	cus.url = url
 	cus.fetchFunc = fetchFunc
 	cus.sseClientSource = sseClientSource
 	cus.logger = logger

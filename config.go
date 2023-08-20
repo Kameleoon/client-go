@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Kameleoon/client-go/v2/logging"
+	"github.com/Kameleoon/client-go/v2/network"
 	"github.com/cristalhq/aconfig"
 	"github.com/cristalhq/aconfig/aconfigyaml"
 )
@@ -23,7 +24,6 @@ type Config struct {
 	Network              NetworkConfig
 	Logger               logging.Logger `yml:"-" yaml:"-"`
 	SiteCode             string         `yml:"site_code" yaml:"site_code"`
-	TrackingURL          string         `yml:"tracking_url" yaml:"tracking_url" default:"https://api-ssx.kameleoon.com"`
 	ProxyURL             string         `yml:"proxy_url" yaml:"proxy_url"`
 	ClientID             string         `yml:"client_id" yaml:"client_id"`
 	ClientSecret         string         `yml:"client_secret" yaml:"client_secret"`
@@ -33,6 +33,7 @@ type Config struct {
 	VerboseMode          bool           `yml:"verbose_mode" yaml:"verbose_mode"`
 	Environment          string         `yml:"environment" yaml:"environment"`
 	UserAgentMaxSize     int            `yml:"-" yaml:"-"`
+	dataApiUrl           string
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -41,8 +42,8 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 func (c *Config) defaults() {
-	if len(c.TrackingURL) == 0 {
-		c.TrackingURL = API_SSX_URL
+	if len(c.dataApiUrl) == 0 {
+		c.dataApiUrl = network.DefaultDataApiUrl
 	}
 	if c.ConfigUpdateInterval == 0 {
 		c.ConfigUpdateInterval = DefaultConfigUpdateInterval

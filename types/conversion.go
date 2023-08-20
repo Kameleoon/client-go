@@ -2,10 +2,12 @@ package types
 
 import (
 	"strconv"
-	"strings"
 
+	"github.com/Kameleoon/client-go/v2/network"
 	"github.com/Kameleoon/client-go/v2/utils"
 )
+
+const conversionEventType = "conversion"
 
 type Conversion struct {
 	GoalId   int
@@ -14,16 +16,13 @@ type Conversion struct {
 }
 
 func (c Conversion) QueryEncode() string {
-	var b strings.Builder
-	b.WriteString("eventType=conversion&goalId=")
-	b.WriteString(utils.WritePositiveInt(c.GoalId))
-	b.WriteString("&revenue=")
-	b.WriteString(strconv.FormatFloat(c.Revenue, 'f', -1, 64))
-	b.WriteString("&negative=")
-	b.WriteString(strconv.FormatBool(c.Negative))
-	b.WriteString("&nonce=")
-	b.WriteString(GetNonce())
-	return b.String()
+	qb := network.NewQueryBuilder()
+	qb.Append(network.QPEventType, conversionEventType)
+	qb.Append(network.QPGoalId, utils.WritePositiveInt(c.GoalId))
+	qb.Append(network.QPRevenue, strconv.FormatFloat(c.Revenue, 'f', -1, 64))
+	qb.Append(network.QPNegative, strconv.FormatBool(c.Negative))
+	qb.Append(network.QPNonce, network.GetNonce())
+	return qb.String()
 }
 
 func (c Conversion) DataType() DataType {

@@ -1,82 +1,76 @@
 package kameleoon
 
 import (
-	"strconv"
-	"strings"
+	"time"
 
+	"github.com/Kameleoon/client-go/v2/network"
 	"github.com/Kameleoon/client-go/v2/types"
-	"github.com/Kameleoon/client-go/v2/utils"
 )
 
-const (
-	TrackingRequestData       = "dataTracking"
-	TrackingRequestExperiment = "experimentTracking"
-)
-
-type trackingRequest struct {
-	Type          string
-	VisitorCode   string
-	VariationID   int
-	ExperimentID  int
-	NoneVariation bool
-	UserAgent     string
+func (c *Client) sendTrackingRequest(visitorCode string, experimentId *int, variationId *int) {
+	cells := c.selectSendData(visitorCode)
+	var cell *types.DataCell
+	if len(cells) > 0 {
+		cell = cells[0]
+	}
+	unsent, lim := c.selectUnsentData(cell)
+	go func() {
+		sent := c.makeTrackingRequest(visitorCode, unsent, experimentId, variationId)
+		if sent {
+			c.markDataAsSent(cell, lim)
+		}
+	}()
 }
 
-const defaultPostMaxRetries = 10
+func (c *Client) makeTrackingRequest(visitorCode string, data []network.QueryEncodable,
+	experimentId *int, variationId *int) bool {
+	ua := c.getUserAgent(visitorCode)
+	token := c.token
+	if (experimentId != nil) && (variationId != nil) {
+		data = append(data, network.ExperimentEvent{ExperimentId: *experimentId, VariationId: *variationId})
+	} else if len(data) == 0 {
+		data = append(data, network.ActivityEvent{})
+	}
+	outChan := make(chan bool)
+	errChan := make(chan error)
+	c.log("Start post to tracking")
+	c.networkManager.SendTrackingData(visitorCode, data, ua, token, time.Duration(-1), outChan, errChan)
+	select {
+	case <-outChan:
+		c.log("Post to tracking done")
+		return true
+	case err := <-errChan:
+		c.log("Failed to post tracking data, error: %v", err)
+		return false
+	}
+}
 
-func (c *Client) postTrackingAsync(r trackingRequest) {
-	req := request{
-		URL:          c.buildTrackingPath(c.Cfg.TrackingURL, r),
-		Method:       MethodPost,
-		ContentType:  HeaderContentTypeText,
-		ClientHeader: c.Cfg.Network.KameleoonClient,
-		UserAgent:    r.UserAgent,
+func (c *Client) selectUnsentData(cell *types.DataCell) ([]network.QueryEncodable, int) {
+	var unsent []network.QueryEncodable
+	if cell == nil {
+		return unsent, -1
 	}
 	c.m.Lock()
-	req.AuthToken = c.token
-	c.m.Unlock()
+	defer c.m.Unlock()
+	for i := 0; i < len(cell.Data); i++ {
+		if _, sent := cell.Index[i]; !sent {
+			unsent = append(unsent, cell.Data[i])
+		}
+	}
+	return unsent, len(cell.Data)
+}
 
-	data := c.selectSendData(r.VisitorCode)
-	c.log("Start post to tracking: %s", data)
-	var sb strings.Builder
-	var err error
-	for _, dataCell := range data {
-		for i := 0; i < len(dataCell.Data); i++ {
-			if _, exist := dataCell.Index[i]; exist {
-				continue
-			}
-			query := dataCell.Data[i].QueryEncode()
-			// need to check len because CustomData can have empty values
-			if len(query) > 0 {
-				sb.WriteString(dataCell.Data[i].QueryEncode())
-				sb.WriteByte('\n')
-			}
+func (c *Client) markDataAsSent(cell *types.DataCell, lim int) {
+	if (cell == nil) || (lim == -1) {
+		return
+	}
+	c.m.Lock()
+	defer c.m.Unlock()
+	for i := 0; i < lim; i++ {
+		if _, sent := cell.Index[i]; !sent {
+			cell.Index[i] = struct{}{}
 		}
 	}
-	req.BodyString = sb.String()
-	for i := defaultPostMaxRetries; i > 0; i-- {
-		err = c.network.Do(req, nil)
-		if err == nil {
-			break
-		}
-		c.log("Trials amount left: %d, error: %v", i, err)
-	}
-	if err != nil {
-		c.log("Failed to post tracking data, error: %v", err)
-		err = nil
-	} else {
-		c.m.Lock()
-		for _, dataCell := range data {
-			for i := 0; i < len(dataCell.Data); i++ {
-				if _, exist := dataCell.Index[i]; exist {
-					continue
-				}
-				dataCell.Index[i] = struct{}{}
-			}
-		}
-		c.m.Unlock()
-	}
-	c.log("Post to tracking done")
 }
 
 func (c *Client) selectSendData(visitorCode ...string) []*types.DataCell {
@@ -96,39 +90,4 @@ func (c *Client) selectSendData(visitorCode ...string) []*types.DataCell {
 		}
 	}
 	return data
-}
-
-func (c *Client) buildTrackingPath(base string, r trackingRequest) string {
-	var b strings.Builder
-	switch r.Type {
-	case TrackingRequestData:
-		b.WriteString(base)
-		b.WriteString("/dataTracking?siteCode=")
-		b.WriteString(c.Cfg.SiteCode)
-		b.WriteString("&visitorCode=")
-		b.WriteString(r.VisitorCode)
-		b.WriteString("&nonce=")
-		b.WriteString(types.GetNonce())
-		return b.String()
-	case TrackingRequestExperiment:
-		b.WriteString(API_SSX_URL)
-		b.WriteString("/experimentTracking?siteCode=")
-		b.WriteString(c.Cfg.SiteCode)
-		b.WriteString("&visitorCode=")
-		b.WriteString(r.VisitorCode)
-		b.WriteString("&experimentID=")
-		b.WriteString(utils.WritePositiveInt(r.ExperimentID))
-		if r.VariationID < 0 {
-			return b.String()
-		}
-		b.WriteString("&variationId=")
-		b.WriteString(strconv.Itoa(r.VariationID))
-		if r.NoneVariation {
-			b.WriteString("&noneVariation=true")
-		}
-		b.WriteString("&nonce=")
-		b.WriteString(types.GetNonce())
-		return b.String()
-	}
-	return ""
 }

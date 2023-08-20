@@ -1,10 +1,12 @@
 package kameleoon
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	ErrInvalidFeatureKeyType = errors.New("feature key should be a string or an int")
-	ErrBadStatus             = errors.New("bad status code")
 	ErrEmptyResponse         = errors.New("empty response")
 )
 
@@ -143,4 +145,8 @@ func newSiteCodeDisabled(msg string) error {
 
 func (e ErrSiteCodeDisabled) Error() string {
 	return "Site with siteCode '" + e.Message + "' is disabled"
+}
+
+func newErrUnexpectedStatusCode(code int) error {
+	return fmt.Errorf("unexpected network response status code '%d'", code)
 }

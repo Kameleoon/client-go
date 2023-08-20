@@ -15,9 +15,8 @@ func NewPageTitleCondition(c types.TargetingCondition) *PageTitleCondition {
 				Type:    c.Type,
 				Include: c.Include,
 			},
-			Value:         c.Title,
-			MatchType:     c.MatchType,
-			ConditionType: string(types.TargetingPageTitle),
+			Value:     c.Title,
+			MatchType: c.MatchType,
 		},
 	}
 }

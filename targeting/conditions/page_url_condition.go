@@ -15,9 +15,8 @@ func NewPageUrlCondition(c types.TargetingCondition) *PageUrlCondition {
 				Type:    c.Type,
 				Include: c.Include,
 			},
-			Value:         c.Url,
-			MatchType:     c.MatchType,
-			ConditionType: string(types.TargetingPageUrl),
+			Value:     c.Url,
+			MatchType: c.MatchType,
 		},
 	}
 }
