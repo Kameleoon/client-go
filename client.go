@@ -1,6 +1,7 @@
 package kameleoon
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +18,7 @@ import (
 
 const (
 	SdkLanguage = "GO"
-	SdkVersion  = "2.2.0" // IMPORTANT!!! SCRIPTS USES THIS VALUE, DO NOT RENAME/FORMAT - ONLY CHANGE VALUE.
+	SdkVersion  = "2.3.0" // IMPORTANT!!! SCRIPTS USES THIS VALUE, DO NOT RENAME/FORMAT - ONLY CHANGE VALUE.
 )
 
 const (
@@ -554,25 +555,95 @@ func (c *Client) GetRemoteData(key string, timeout ...time.Duration) ([]byte, er
 	if len(timeout) > 0 {
 		timeoutValue = timeout[0]
 	}
-	outChan := make(chan json.RawMessage)
-	errChan := make(chan error)
 	c.log("Retrieve data from remote source (key '%s')", key)
-	c.networkManager.GetRemoteData(key, timeoutValue, outChan, errChan)
-	select {
-	case out := <-outChan:
-		return out, nil
-	case err := <-errChan:
+	out, err := c.networkManager.GetRemoteData(key, timeoutValue)
+	if err != nil {
 		if innerErr, isInnerErr := err.(network.ErrUnexpectedResponseStatus); isInnerErr {
 			err = newErrUnexpectedStatusCode(innerErr.Code)
 		}
 		c.log("Failed retrieve data from remote source: %v", err)
 		return nil, err
 	}
+	return out, nil
 }
 
 // Deprecated: Please use `GetRemoteData`
 func (c *Client) RetrieveDataFromRemoteSource(key string, timeout ...time.Duration) ([]byte, error) {
 	return c.GetRemoteData(key, timeout...)
+}
+
+func (c *Client) GetRemoteVisitorData(visitorCode string, addData bool,
+	timeout ...time.Duration) ([]types.Data, error) {
+	timeoutValue := time.Duration(-1)
+	if len(timeout) > 0 {
+		timeoutValue = timeout[0]
+	}
+	out, err := c.networkManager.GetRemoteVisitorData(visitorCode, timeoutValue)
+	if err != nil {
+		return nil, err
+	}
+	var dataList []types.Data
+	if dataList, err = parseCustomDataList(out); err != nil {
+		return nil, err
+	}
+	if addData {
+		err = c.AddData(visitorCode, dataList...)
+	}
+	return dataList, err
+}
+
+func parseCustomDataList(raw json.RawMessage) ([]types.Data, error) {
+	list := remoteVisitorDataList{}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return nil, err
+	}
+	latestRecord := list.latestRecord()
+	if latestRecord == nil {
+		return []types.Data{}, nil
+	}
+	customDataList := make([]types.Data, 0, len(latestRecord.CustomDataEvents))
+	for _, event := range latestRecord.CustomDataEvents {
+		if event.Data != nil {
+			customDataList = append(customDataList, event.Data.toCustomData())
+		}
+	}
+	return customDataList, nil
+}
+
+type remoteVisitorCustomData struct {
+	Id     int            `json:"index"`
+	Values map[string]int `json:"valuesCountMap"`
+}
+
+func (rvcd *remoteVisitorCustomData) toCustomData() *types.CustomData {
+	values := make([]string, 0, len(rvcd.Values))
+	for v := range rvcd.Values {
+		values = append(values, v)
+	}
+	return types.NewCustomData(fmt.Sprint(rvcd.Id), values...)
+}
+
+type remoteVisitorEvent struct {
+	Data *remoteVisitorCustomData `json:"data"`
+}
+
+type remoteVisitorDataVisit struct {
+	CustomDataEvents []remoteVisitorEvent `json:"customDataEvents"`
+}
+
+type remoteVisitorDataList struct {
+	CurrentVisit   *remoteVisitorDataVisit  `json:"currentVisit"`
+	PreviousVisits []remoteVisitorDataVisit `json:"previousVisits"`
+}
+
+func (list remoteVisitorDataList) latestRecord() *remoteVisitorDataVisit {
+	if list.CurrentVisit != nil {
+		return list.CurrentVisit
+	}
+	if (list.PreviousVisits != nil) && (len(list.PreviousVisits) > 0) {
+		return &list.PreviousVisits[0]
+	}
+	return nil
 }
 
 func (c *Client) getExperiment(id int) (configuration.Experiment, error) {
@@ -607,16 +678,10 @@ type oauthResp struct {
 
 func (c *Client) fetchToken() error {
 	c.log("Fetching bearer token")
-	outChan := make(chan json.RawMessage)
-	errChan := make(chan error)
-	c.networkManager.FetchBearerToken(c.Cfg.ClientID, c.Cfg.ClientSecret, time.Duration(-1), outChan, errChan)
+	out, err := c.networkManager.FetchBearerToken(c.Cfg.ClientID, c.Cfg.ClientSecret, -1)
 	resp := oauthResp{}
-	var out json.RawMessage
-	var err error
-	select {
-	case out = <-outChan:
+	if err == nil {
 		err = json.Unmarshal(out, &resp)
-	case err = <-errChan:
 	}
 	if err != nil {
 		c.log("Failed to fetch bearer token: %v", err)
@@ -674,19 +739,13 @@ func (c *Client) requestClientConfig(siteCode string, ts int64) (configuration.C
 		c.log("Fetching configuration for TS:%v", ts)
 	}
 	var campaigns configuration.Configuration
-	outChan := make(chan json.RawMessage)
-	errChan := make(chan error)
-	c.networkManager.FetchConfiguration(ts, time.Duration(-1), outChan, errChan)
-	var out json.RawMessage
-	var err error
-	select {
-	case out = <-outChan:
+	out, err := c.networkManager.FetchConfiguration(ts, -1)
+	if err == nil {
 		if len(out) == 0 {
 			err = ErrEmptyResponse
 		} else {
 			err = json.Unmarshal(out, &campaigns)
 		}
-	case err = <-errChan:
 	}
 	if err == nil {
 		c.log("Configuraiton fetched: %v", campaigns)

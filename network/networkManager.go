@@ -16,14 +16,13 @@ type NetworkManager interface {
 	GetNetProvider() NetProvider
 	GetUrlProvider() *UrlProvider
 
-	FetchConfiguration(ts int64, timeout time.Duration, out chan<- json.RawMessage, err chan<- error)
-	GetRemoteData(key string, timeout time.Duration, out chan<- json.RawMessage, err chan<- error)
-	GetVisitorRemoteData(visitorCode string, timeout time.Duration, out chan<- json.RawMessage, err chan<- error)
+	FetchConfiguration(ts int64, timeout time.Duration) (json.RawMessage, error)
+	GetRemoteData(key string, timeout time.Duration) (json.RawMessage, error)
+	GetRemoteVisitorData(visitorCode string, timeout time.Duration) (json.RawMessage, error)
 
 	SendTrackingData(visitorCode string, lines []QueryEncodable, userAgent string, authToken string,
-		timeout time.Duration, out chan<- bool, err chan<- error)
-	FetchBearerToken(clientId string, clientSecret string, timeout time.Duration,
-		out chan<- json.RawMessage, err chan<- error)
+		timeout time.Duration) (bool, error)
+	FetchBearerToken(clientId string, clientSecret string, timeout time.Duration) (json.RawMessage, error)
 }
 
 // base implementation
@@ -70,38 +69,26 @@ func (nm *NetworkManagerImpl) ensureTimeout(timeout *time.Duration) {
 	}
 }
 
-func (nm *NetworkManagerImpl) makeCall(request Request, attemptCount int, retryDelay time.Duration,
-	textOut chan<- string, jsonOut chan<- json.RawMessage, statusOut chan<- bool, errChan chan<- error) {
-	go func() {
-		var err error
-		for i := 0; i < attemptCount; i++ {
-			if (i > 0) && (retryDelay > 0) {
-				time.Sleep(retryDelay)
-			}
-			response := nm.NetProvider.Call(request)
-			if response.Err != nil {
-				err = response.Err
-				nm.logErrOccurred(request, response.Err)
-				continue
-			}
-			if response.Code/100 != 2 {
-				err = ErrUnexpectedResponseStatus{Code: response.Code}
-				nm.logUnexpectedCode(request, response.Code)
-				continue
-			}
-			if textOut != nil {
-				textOut <- string(response.Body)
-			}
-			if jsonOut != nil {
-				jsonOut <- response.Body
-			}
-			if statusOut != nil {
-				statusOut <- true
-			}
-			return
+func (nm *NetworkManagerImpl) makeCall(request Request, attemptCount int, retryDelay time.Duration) ([]byte, error) {
+	var err error
+	for i := 0; i < attemptCount; i++ {
+		if (i > 0) && (retryDelay > 0) {
+			time.Sleep(retryDelay)
 		}
-		errChan <- err
-	}()
+		response := nm.NetProvider.Call(request)
+		if response.Err != nil {
+			err = response.Err
+			nm.logErrOccurred(request, response.Err)
+			continue
+		}
+		if response.Code/100 != 2 {
+			err = ErrUnexpectedResponseStatus{Code: response.Code}
+			nm.logUnexpectedCode(request, response.Code)
+			continue
+		}
+		return response.Body, nil
+	}
+	return nil, err
 }
 
 func (nm *NetworkManagerImpl) logErrOccurred(request Request, err error) {

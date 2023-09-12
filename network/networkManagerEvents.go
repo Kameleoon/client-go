@@ -1,7 +1,6 @@
 package network
 
 import (
-	"encoding/json"
 	"strings"
 	"time"
 )
@@ -11,37 +10,10 @@ const (
 	DefaultTrackingCallRetryDelay = time.Second * 5
 )
 
-func (nm *NetworkManagerImpl) GetRemoteData(key string, timeout time.Duration,
-	out chan<- json.RawMessage, err chan<- error) {
-	url := nm.UrlProvider.MakeApiDataGetRequestUrl(key)
-	nm.ensureTimeout(&timeout)
-	request := Request{
-		Method:      HttpGet,
-		Url:         url,
-		ContentType: JsonContentType,
-		Timeout:     timeout,
-	}
-	nm.makeCall(request, 1, time.Duration(-1), nil, out, nil, err)
-}
-
-func (nm *NetworkManagerImpl) GetVisitorRemoteData(visitorCode string, timeout time.Duration,
-	out chan<- json.RawMessage, err chan<- error) {
-	url := nm.UrlProvider.MakeVisitorDataGetUrl(visitorCode)
-	nm.ensureTimeout(&timeout)
-	request := Request{
-		Method:      HttpGet,
-		Url:         url,
-		ContentType: JsonContentType,
-		Timeout:     timeout,
-	}
-	nm.makeCall(request, 1, time.Duration(-1), nil, out, nil, err)
-}
-
 func (nm *NetworkManagerImpl) SendTrackingData(visitorCode string, lines []QueryEncodable, userAgent string,
-	authToken string, timeout time.Duration, out chan<- bool, err chan<- error) {
+	authToken string, timeout time.Duration) (bool, error) {
 	if len(lines) == 0 {
-		go func() { out <- false }()
-		return
+		return false, nil
 	}
 	url := nm.UrlProvider.MakeTrackingUrl(visitorCode)
 	nm.ensureTimeout(&timeout)
@@ -55,7 +27,11 @@ func (nm *NetworkManagerImpl) SendTrackingData(visitorCode string, lines []Query
 		UserAgent:   userAgent,
 		Data:        data,
 	}
-	nm.makeCall(request, TrackingCallRetryNumber+1, nm.TrackingCallRetryDelay, nil, nil, out, err)
+	_, err := nm.makeCall(request, TrackingCallRetryNumber+1, nm.TrackingCallRetryDelay)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 func formTrackingRequestData(lines []QueryEncodable) string {
 	sb := strings.Builder{}

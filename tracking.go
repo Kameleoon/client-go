@@ -1,8 +1,6 @@
 package kameleoon
 
 import (
-	"time"
-
 	"github.com/Kameleoon/client-go/v2/network"
 	"github.com/Kameleoon/client-go/v2/types"
 )
@@ -23,7 +21,7 @@ func (c *Client) sendTrackingRequest(visitorCode string, experimentId *int, vari
 }
 
 func (c *Client) makeTrackingRequest(visitorCode string, data []network.QueryEncodable,
-	experimentId *int, variationId *int) bool {
+	experimentId *int, variationId *int) (sent bool) {
 	ua := c.getUserAgent(visitorCode)
 	token := c.token
 	if (experimentId != nil) && (variationId != nil) {
@@ -31,18 +29,14 @@ func (c *Client) makeTrackingRequest(visitorCode string, data []network.QueryEnc
 	} else if len(data) == 0 {
 		data = append(data, network.ActivityEvent{})
 	}
-	outChan := make(chan bool)
-	errChan := make(chan error)
 	c.log("Start post to tracking")
-	c.networkManager.SendTrackingData(visitorCode, data, ua, token, time.Duration(-1), outChan, errChan)
-	select {
-	case <-outChan:
-		c.log("Post to tracking done")
-		return true
-	case err := <-errChan:
+	out, err := c.networkManager.SendTrackingData(visitorCode, data, ua, token, -1)
+	if err != nil {
 		c.log("Failed to post tracking data, error: %v", err)
 		return false
 	}
+	c.log("Post to tracking done")
+	return out
 }
 
 func (c *Client) selectUnsentData(cell *types.DataCell) ([]network.QueryEncodable, int) {

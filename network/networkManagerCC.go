@@ -7,8 +7,7 @@ import (
 
 const fetchConfigurationAttemptNumber = 4
 
-func (nm *NetworkManagerImpl) FetchConfiguration(ts int64, timeout time.Duration,
-	out chan<- json.RawMessage, err chan<- error) {
+func (nm *NetworkManagerImpl) FetchConfiguration(ts int64, timeout time.Duration) (json.RawMessage, error) {
 	url := nm.UrlProvider.MakeConfigurationUrl(nm.Environment, ts)
 	nm.ensureTimeout(&timeout)
 	request := Request{
@@ -17,5 +16,5 @@ func (nm *NetworkManagerImpl) FetchConfiguration(ts int64, timeout time.Duration
 		ContentType: JsonContentType,
 		Timeout:     timeout,
 	}
-	nm.makeCall(request, fetchConfigurationAttemptNumber, time.Duration(-1), nil, out, nil, err)
+	return nm.makeCall(request, fetchConfigurationAttemptNumber, -1)
 }

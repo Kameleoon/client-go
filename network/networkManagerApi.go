@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-func (nm *NetworkManagerImpl) FetchBearerToken(clientId string, clientSecret string, timeout time.Duration,
-	out chan<- json.RawMessage, err chan<- error) {
+func (nm *NetworkManagerImpl) FetchBearerToken(clientId string, clientSecret string,
+	timeout time.Duration) (json.RawMessage, error) {
 	url := nm.UrlProvider.MakeBearerTokenUrl()
 	nm.ensureTimeout(&timeout)
 	data := formFetchBearerTokenData(clientId, clientSecret)
@@ -17,7 +17,7 @@ func (nm *NetworkManagerImpl) FetchBearerToken(clientId string, clientSecret str
 		Timeout:     timeout,
 		Data:        data,
 	}
-	nm.makeCall(request, 1, time.Duration(-1), nil, out, nil, err)
+	return nm.makeCall(request, 1, -1)
 }
 func formFetchBearerTokenData(clientId string, clientSecret string) string {
 	qb := NewQueryBuilder()
