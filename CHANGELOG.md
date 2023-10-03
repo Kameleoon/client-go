@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 2.3.1 - 2023-10-03
+### Features
+* Added support for older versions of the Go language. You can now use version 1.12 or later (previously, the minimum version was 1.16).
+
 ## 2.3.0 - 2023-09-12
 ### Features
 * Added [`GetRemoteVisitorData`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#GetRemoteVisitorData) method to fetch a visitor's remote data (with an optional capability to add the fetched data to the visitor).

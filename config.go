@@ -17,7 +17,7 @@ const (
 	DefaultVisitorDataMaxSize   = 500 // 500 mb
 	ClientHeader                = "sdk/" + SdkLanguage + "/"
 	DefaultEnvironment          = ""
-	DefaultUserAgentMaxSize     = 100_000
+	DefaultUserAgentMaxSize     = 100000
 )
 
 type Config struct {
