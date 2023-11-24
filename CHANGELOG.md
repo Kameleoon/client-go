@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.0.1 - 2023-11-24
+### Bug fixes
+* Stability and performance improvements
+
 ## 3.0.0 - 2023-11-24
 ### Breaking changes
 * Increased the minimum required version of the Go language to [1.18](https://go.dev/doc/go1.18).
