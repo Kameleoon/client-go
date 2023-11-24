@@ -4,33 +4,67 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Kameleoon/client-go/v2/network"
+	"github.com/Kameleoon/client-go/v3/utils"
 )
 
 const pageViewEventType = "page"
 
 type PageView struct {
-	URL       string
-	Title     string
-	Referrers []int
+	duplicationSafeSendableBase
+	url       string
+	title     string
+	referrers []int
 }
 
-func (v PageView) QueryEncode() string {
-	qb := network.NewQueryBuilder()
-	qb.Append(network.QPEventType, pageViewEventType)
-	qb.Append(network.QPHref, v.URL)
-	qb.Append(network.QPTitle, v.Title)
-	if len(v.Referrers) > 0 {
-		qb.Append(network.QPReferrersIndices, v.encodeReferrers())
+func NewPageView(url string, referrers ...int) *PageView {
+	return NewPageViewWithTitle(url, "", referrers...)
+}
+func NewPageViewWithTitle(url string, title string, referrers ...int) *PageView {
+	pv := &PageView{
+		url:       url,
+		title:     title,
+		referrers: referrers,
 	}
-	qb.Append(network.QPNonce, network.GetNonce())
+	pv.initSendale()
+	return pv
+}
+
+func (pv *PageView) dataRestriction() {}
+
+func (pv *PageView) URL() string {
+	return pv.url
+}
+
+func (pv *PageView) Title() string {
+	return pv.title
+}
+
+func (pv *PageView) Referrers() []int {
+	return pv.referrers
+}
+
+func (pv *PageView) QueryEncode() string {
+	if len(pv.url) == 0 {
+		return ""
+	}
+	nonce := pv.Nonce()
+	if len(nonce) == 0 {
+		return ""
+	}
+	qb := utils.NewQueryBuilder()
+	qb.Append(utils.QPEventType, pageViewEventType)
+	qb.Append(utils.QPHref, pv.url)
+	qb.Append(utils.QPTitle, pv.title)
+	if len(pv.referrers) > 0 {
+		qb.Append(utils.QPReferrersIndices, pv.encodeReferrers())
+	}
+	qb.Append(utils.QPNonce, nonce)
 	return qb.String()
 }
-
-func (v PageView) encodeReferrers() string {
-	return strings.ReplaceAll(fmt.Sprint(v.Referrers), " ", ",")
+func (pv *PageView) encodeReferrers() string {
+	return strings.ReplaceAll(fmt.Sprint(pv.referrers), " ", ",")
 }
 
-func (v PageView) DataType() DataType {
+func (pv *PageView) DataType() DataType {
 	return DataTypePageView
 }

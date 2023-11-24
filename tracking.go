@@ -1,36 +1,51 @@
 package kameleoon
 
 import (
-	"github.com/Kameleoon/client-go/v2/network"
-	"github.com/Kameleoon/client-go/v2/types"
+	"github.com/Kameleoon/client-go/v3/storage"
+	"github.com/Kameleoon/client-go/v3/types"
 )
 
-func (c *Client) sendTrackingRequest(visitorCode string, experimentId *int, variationId *int) {
-	cells := c.selectSendData(visitorCode)
-	var cell *types.DataCell
-	if len(cells) > 0 {
-		cell = cells[0]
+func (c *kameleoonClient) isConsentProvided(visitor storage.Visitor) bool {
+	return !c.dataFile.Settings().IsConsentRequired || ((visitor != nil) && visitor.LegalConsent())
+}
+
+func (c *kameleoonClient) sendTrackingRequest(visitorCode string, visitor storage.Visitor, forceRequest bool) {
+	if visitor == nil {
+		visitor = c.visitorManager.GetVisitor(visitorCode)
+		if (visitor == nil) && c.dataFile.Settings().IsConsentRequired {
+			return
+		}
 	}
-	unsent, lim := c.selectUnsentData(cell)
+	consent := c.isConsentProvided(visitor)
+	var unsent []types.Sendable
+	var userAgent string
+	if visitor != nil {
+		userAgent = visitor.UserAgent()
+		unsent = c.selectUnsentData(visitor, consent)
+	}
+	if len(unsent) == 0 {
+		if forceRequest && consent {
+			unsent = append(unsent, types.NewActivityEvent())
+		} else {
+			return
+		}
+	}
 	go func() {
-		sent := c.makeTrackingRequest(visitorCode, unsent, experimentId, variationId)
-		if sent {
-			c.markDataAsSent(cell, lim)
+		if c.makeTrackingRequest(visitorCode, userAgent, unsent) {
+			for _, qe := range unsent {
+				qe.MarkAsSent()
+			}
 		}
 	}()
 }
 
-func (c *Client) makeTrackingRequest(visitorCode string, data []network.QueryEncodable,
-	experimentId *int, variationId *int) (sent bool) {
-	ua := c.getUserAgent(visitorCode)
-	token := c.token
-	if (experimentId != nil) && (variationId != nil) {
-		data = append(data, network.ExperimentEvent{ExperimentId: *experimentId, VariationId: *variationId})
-	} else if len(data) == 0 {
-		data = append(data, network.ActivityEvent{})
+func (c *kameleoonClient) makeTrackingRequest(visitorCode string, userAgent string, data []types.Sendable) (sent bool) {
+	if len(data) == 0 {
+		return false
 	}
+	token := c.token
 	c.log("Start post to tracking")
-	out, err := c.networkManager.SendTrackingData(visitorCode, data, ua, token, -1)
+	out, err := c.networkManager.SendTrackingData(visitorCode, data, userAgent, token, -1)
 	if err != nil {
 		c.log("Failed to post tracking data, error: %v", err)
 		return false
@@ -39,49 +54,28 @@ func (c *Client) makeTrackingRequest(visitorCode string, data []network.QueryEnc
 	return out
 }
 
-func (c *Client) selectUnsentData(cell *types.DataCell) ([]network.QueryEncodable, int) {
-	var unsent []network.QueryEncodable
-	if cell == nil {
-		return unsent, -1
-	}
-	c.m.Lock()
-	defer c.m.Unlock()
-	for i := 0; i < len(cell.Data); i++ {
-		if _, sent := cell.Index[i]; !sent {
-			unsent = append(unsent, cell.Data[i])
-		}
-	}
-	return unsent, len(cell.Data)
-}
-
-func (c *Client) markDataAsSent(cell *types.DataCell, lim int) {
-	if (cell == nil) || (lim == -1) {
-		return
-	}
-	c.m.Lock()
-	defer c.m.Unlock()
-	for i := 0; i < lim; i++ {
-		if _, sent := cell.Index[i]; !sent {
-			cell.Index[i] = struct{}{}
-		}
-	}
-}
-
-func (c *Client) selectSendData(visitorCode ...string) []*types.DataCell {
-	var data []*types.DataCell
-	if len(visitorCode) > 0 && len(visitorCode[0]) > 0 {
-		if dc := c.getDataCell(visitorCode[0]); dc != nil && len(dc.Data) != len(dc.Index) {
-			data = append(data, dc)
-		}
-		return data
-	}
-	for kv := range c.Data.Iter() {
-		if dc, ok := kv.Value.(*types.DataCell); ok {
-			if len(dc.Data) == len(dc.Index) {
-				continue
+func (c *kameleoonClient) selectUnsentData(visitor storage.Visitor, consent bool) []types.Sendable {
+	var unsent []types.Sendable
+	if consent {
+		visitor.EnumerateSendableData(func(s types.Sendable) bool {
+			if !s.Sent() {
+				unsent = append(unsent, s)
 			}
-			data = append(data, dc)
-		}
+			return true
+		})
+	} else {
+		visitor.Conversions().Enumerate(func(c *types.Conversion) bool {
+			if !c.Sent() {
+				unsent = append(unsent, c)
+			}
+			return true
+		})
+		visitor.Variations().Enumerate(func(av *types.AssignedVariation) bool {
+			if !av.Sent() && (av.RuleType() == types.RuleTypeTargetedDelivery) {
+				unsent = append(unsent, av)
+			}
+			return true
+		})
 	}
-	return data
+	return unsent
 }

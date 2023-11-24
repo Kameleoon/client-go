@@ -3,8 +3,8 @@ package targeting
 import (
 	"strings"
 
-	"github.com/Kameleoon/client-go/v2/types"
-	"github.com/Kameleoon/client-go/v2/utils"
+	"github.com/Kameleoon/client-go/v3/types"
+	"github.com/Kameleoon/client-go/v3/utils"
 )
 
 type Segment struct {

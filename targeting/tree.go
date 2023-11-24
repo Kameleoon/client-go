@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Kameleoon/client-go/v2/targeting/conditions"
-	"github.com/Kameleoon/client-go/v2/types"
+	"github.com/Kameleoon/client-go/v3/targeting/conditions"
+	"github.com/Kameleoon/client-go/v3/types"
 )
 
 type GetTargetingData func(types.TargetingType) interface{}
@@ -77,7 +77,8 @@ func (t *Tree) CheckTargeting(data GetTargetingData) bool {
 }
 
 func (t *Tree) checkCondition(data GetTargetingData) bool {
-	targeted := t.Condition.CheckTargeting(data(t.Condition.GetType()))
+	td := data(t.Condition.GetType())
+	targeted := t.Condition.CheckTargeting(td)
 	if !t.Condition.GetInclude() {
 		targeted = !targeted
 	}

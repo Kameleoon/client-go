@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Kameleoon/client-go/v2/types"
-	"github.com/Kameleoon/client-go/v2/utils"
+	"github.com/Kameleoon/client-go/v3/types"
+	"github.com/Kameleoon/client-go/v3/utils"
 )
 
 type StringValueCondition struct {
@@ -17,18 +17,18 @@ type StringValueCondition struct {
 }
 
 func (c *StringValueCondition) CheckTargeting(targetData interface{}) bool {
-	value, ok := targetData.(*string)
+	value, ok := targetData.(string)
 	return ok && c.checkTargeting(value)
 }
 
-func (c *StringValueCondition) checkTargeting(value *string) bool {
+func (c *StringValueCondition) checkTargeting(value string) bool {
 	switch c.MatchType {
 	case types.OperatorExact:
-		return *value == c.Value
+		return value == c.Value
 	case types.OperatorContains:
-		return strings.Contains(*value, c.Value)
+		return strings.Contains(value, c.Value)
 	case types.OperatorRegExp:
-		matched, err := regexp.MatchString(c.Value, *value)
+		matched, err := regexp.MatchString(c.Value, value)
 		return err == nil && matched
 	default:
 		fmt.Printf("unexpected comparing operation for %v condition: %v\n", c.TargetingConditionBase.Type, c.MatchType)

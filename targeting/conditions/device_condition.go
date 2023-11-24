@@ -1,8 +1,8 @@
 package conditions
 
 import (
-	"github.com/Kameleoon/client-go/v2/types"
-	"github.com/Kameleoon/client-go/v2/utils"
+	"github.com/Kameleoon/client-go/v3/types"
+	"github.com/Kameleoon/client-go/v3/utils"
 )
 
 func NewDeviceCondition(c types.TargetingCondition) *DeviceCondition {
@@ -21,8 +21,8 @@ type DeviceCondition struct {
 }
 
 func (c *DeviceCondition) CheckTargeting(targetData interface{}) bool {
-	device, ok := GetLastTargetingData(targetData, types.DataTypeDevice).(*types.Device)
-	return ok && device.Type == c.Device
+	device, ok := targetData.(*types.Device)
+	return ok && (device != nil) && (device.Type() == c.Device)
 }
 
 func (c *DeviceCondition) String() string {

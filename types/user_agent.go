@@ -1,11 +1,17 @@
 package types
 
 type UserAgent struct {
-	Value string
+	value string
 }
 
-func (ua UserAgent) QueryEncode() string {
-	return ""
+func NewUserAgent(value string) UserAgent {
+	return UserAgent{value: value}
+}
+
+func (ua UserAgent) dataRestriction() {}
+
+func (ua UserAgent) Value() string {
+	return ua.value
 }
 
 func (ua UserAgent) DataType() DataType {

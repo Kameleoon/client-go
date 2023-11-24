@@ -6,8 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Kameleoon/client-go/v2/types"
-	"github.com/Kameleoon/client-go/v2/utils"
+	"github.com/Kameleoon/client-go/v3/storage"
+	"github.com/Kameleoon/client-go/v3/types"
+	"github.com/Kameleoon/client-go/v3/utils"
 	"github.com/segmentio/encoding/json"
 )
 
@@ -34,24 +35,16 @@ type CustomDatum struct {
 }
 
 func (c *CustomDatum) CheckTargeting(targetData interface{}) bool {
-	if _, ok := targetData.([]types.TargetingData); !ok {
+	customDataStorage, ok := targetData.(storage.DataMapStorage[int, *types.CustomData])
+	if !ok || (customDataStorage == nil) {
 		return false
 	}
-	var arrayCustomData []*types.CustomData
-	for _, td := range targetData.([]types.TargetingData) {
-		if td.Data.DataType() != types.DataTypeCustom {
-			continue
-		}
-		custom, ok := td.Data.(*types.CustomData)
-		if ok && custom.ID == c.Index {
-			arrayCustomData = append(arrayCustomData, custom)
+	if id, err := strconv.Atoi(c.Index); err == nil {
+		if customData := customDataStorage.Get(id); customData != nil {
+			return c.checkTargeting(customData.Values())
 		}
 	}
-	if len(arrayCustomData) == 0 {
-		return c.Operator == types.OperatorUndefined
-	}
-	customData := arrayCustomData[len(arrayCustomData)-1]
-	return c.checkTargeting(customData.GetValues())
+	return c.Operator == types.OperatorUndefined
 }
 
 func (c *CustomDatum) checkTargeting(customDataValues []string) bool {

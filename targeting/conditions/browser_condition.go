@@ -3,8 +3,8 @@ package conditions
 import (
 	"fmt"
 
-	"github.com/Kameleoon/client-go/v2/types"
-	"github.com/Kameleoon/client-go/v2/utils"
+	"github.com/Kameleoon/client-go/v3/types"
+	"github.com/Kameleoon/client-go/v3/utils"
 )
 
 func NewBrowserCondition(c types.TargetingCondition) *BrowserCondition {
@@ -27,13 +27,13 @@ type BrowserCondition struct {
 }
 
 func (c *BrowserCondition) CheckTargeting(targetData interface{}) bool {
-	browser, ok := GetLastTargetingData(targetData, types.DataTypeBrowser).(*types.Browser)
-	return ok && c.checkTargeting(browser)
+	browser, ok := targetData.(*types.Browser)
+	return ok && (browser != nil) && c.checkTargeting(browser)
 }
 
 func (c *BrowserCondition) checkTargeting(browser *types.Browser) bool {
 	// return false, if browser types are not equal
-	if c.browserStringToInt() != browser.Type {
+	if c.browserStringToInt() != browser.Type() {
 		return false
 	}
 	// return true, browser types are equal and version isn't defined
@@ -49,11 +49,11 @@ func (c *BrowserCondition) checkTargeting(browser *types.Browser) bool {
 
 	switch c.VersionMatchType {
 	case types.OperatorEqual:
-		return browser.Version == versionNumber
+		return browser.Version() == versionNumber
 	case types.OperatorGreater:
-		return browser.Version > versionNumber
+		return browser.Version() > versionNumber
 	case types.OperatorLower:
-		return browser.Version < versionNumber
+		return browser.Version() < versionNumber
 	default:
 		fmt.Printf("unexpected comparing operation for browser condition: %v\n", c.VersionMatchType)
 		return false

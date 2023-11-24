@@ -34,4 +34,4 @@ func (l *LoggerImpl) Printf(format string, v ...interface{}) {
 	}
 }
 
-var DefaultLogger Logger = log.New(os.Stdout, "KameleoonClient SDK", log.LstdFlags)
+var DefaultLogger Logger = log.New(os.Stdout, "KameleoonClient SDK: ", log.LstdFlags)

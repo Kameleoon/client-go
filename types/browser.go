@@ -3,8 +3,7 @@ package types
 import (
 	"fmt"
 
-	"github.com/Kameleoon/client-go/v2/network"
-	"github.com/Kameleoon/client-go/v2/utils"
+	"github.com/Kameleoon/client-go/v3/utils"
 )
 
 type BrowserType int
@@ -21,21 +20,44 @@ const (
 const browserEventType = "staticData"
 
 type Browser struct {
-	Type    BrowserType
-	Version float32
+	duplicationUnsafeSendableBase
+	browserType BrowserType
+	version     float32
 }
 
-func (b Browser) QueryEncode() string {
-	qb := network.NewQueryBuilder()
-	qb.Append(network.QPEventType, browserEventType)
-	qb.Append(network.QPBrowserIndex, utils.WritePositiveInt(int(b.Type)))
-	if b.Version != 0 {
-		qb.Append(network.QPBrowserVersion, fmt.Sprintf("%f", b.Version))
+func NewBrowser(browserType BrowserType, version ...float32) *Browser {
+	var versionValue float32
+	if len(version) > 0 {
+		versionValue = version[0]
 	}
-	qb.Append(network.QPNonce, network.GetNonce())
+	return &Browser{browserType: browserType, version: versionValue}
+}
+
+func (b *Browser) dataRestriction() {}
+
+func (b *Browser) Type() BrowserType {
+	return b.browserType
+}
+
+func (b *Browser) Version() float32 {
+	return b.version
+}
+
+func (b *Browser) QueryEncode() string {
+	nonce := b.Nonce()
+	if len(nonce) == 0 {
+		return ""
+	}
+	qb := utils.NewQueryBuilder()
+	qb.Append(utils.QPEventType, browserEventType)
+	qb.Append(utils.QPBrowserIndex, utils.WritePositiveInt(int(b.browserType)))
+	if b.version != 0 {
+		qb.Append(utils.QPBrowserVersion, fmt.Sprintf("%f", b.version))
+	}
+	qb.Append(utils.QPNonce, nonce)
 	return qb.String()
 }
 
-func (b Browser) DataType() DataType {
+func (b *Browser) DataType() DataType {
 	return DataTypeBrowser
 }

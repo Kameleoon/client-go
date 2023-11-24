@@ -132,6 +132,6 @@ func (c TargetingConditionBase) GetInclude() bool {
 	return c.Include
 }
 
-func (c TargetingConditionBase) CheckTargeting(_ []TargetingData) bool {
+func (c TargetingConditionBase) CheckTargeting(_ []Data) bool {
 	return true
 }

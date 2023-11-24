@@ -1,6 +1,92 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.0.0 - 2023-11-24
+### Breaking changes
+* Increased the minimum required version of the Go language to [1.18](https://go.dev/doc/go1.18).
+* Renamed `Client` to `KameleoonClient`
+* Removed `NewClient` function. Instead, use [`KameleoonClientFactory`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#kameleoonclientfactory)
+* Removed `RunWhenReady` method. Instead, use [`WaitInit`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#waitinit)
+* Changed `Config`:
+    - Renamed `Config` to `KameleoonClientConfig`
+    - Changed the default request timeout to `10` seconds
+    - Renamed the `Timeout` and `timeout` configuration fields to `DefaultTimeout` and [`default_timeout`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#additional-configuration), respectively)
+    - Renamed the `ConfigUpdateInterval` and `config_update_interval` configuration fields to `RefreshInterval` and [`refresh_interval`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#additional-configuration), respectively.)
+    - `LoadConfig` function and `KameleoonClientConfig.Load` can now return an error.
+* The `Cfg` field is no longer accessible.
+* Renamed `GetFeatureAllVariables` method to `GetFeatureVariationVariables`(https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getfeaturevariationvariables)
+* Removed all methods and errors related to **experiments**:
+  * Methods:
+    - `TriggerExperiment`
+    - `GetVariationAssociatedData`
+    - `GetExperimentList`
+    - `GetExperimentListForVisitor`
+  * Error types:
+    - `ErrExperimentConfigNotFound`
+    - `ErrNotTargeted`
+    - `ErrNotAllocated`
+    - `ErrSiteCodeDisabled`
+* Changed errors:
+  * Moved error types into `errs` package
+  * Added `UnexpectedStatusCode` error, which can be thrown by the following methods:
+    - [`GetRemoteData`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getremotedata)
+    - [`GetRemoteVisitorData`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getremotevisitordata)
+  * Renamed the following errors:
+    - `ErrFeatureConfigNotFound` to `FeatureNotFound`
+    - `ErrFeatureVariableNotFound` to `FeatureVariableNotFound`
+    - `ErrVariationNotFound` to `FeatureVariationNotFound`
+    - `ErrCredentialsNotFound` to `ConfigCredentialsInvalid`
+    - `ErrVisitorCodeNotValid` to `VisitorCodeInvalid`
+* The new error `FeatureEnvironmentDisabled` may be returned by the following methods:
+    - [`GetFeatureVariationKey`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getfeaturevariationkey)
+    - [`GetFeatureVariable`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getfeaturevariable)
+    - [`GetFeatureVariationVariables`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getfeaturevariationvariables)
+* Changed `Data` types:
+  * [`Browser`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#browser):
+    - Added constructor [`NewBrowser`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#newbrowser)
+    - Hid the `Type` and `Version` fields and replaced them with getter methods
+  * [`Conversion`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#conversion):
+    - Added constructors [`NewConversion`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#newconversion) and [`NewConversionWithRevenue`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#newconversionwithrevenue)
+    - Hid the `GoalId`, `Revenue`, and `Negative` fields and replaced them with getter methods
+  * [`CustomData`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#customdata):
+    - Changed the data type of the `ID` field to `int`
+    - Hid the `ID` field and replaced with a getter method
+    - Renamed `GetValues` to `Values`
+  * [`Device`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#device):
+    - Added constructor [`NewDevice`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#newdevice)
+    - Hid the `Type` field and replaced with a getter method
+  * [`PageView`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#pageview):
+    - Added constructors [`NewPageView`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#newpageview), [`NewPageViewWithTitle`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#newpageviewwithtitle)
+    - Hid the `URL`, `Title`, and `Referrers` fields and replaced with the getters
+    - Changed `url` from optional to a required parameter
+  * [`UserAgent`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#useragent):
+    - Added constructor [`NewUserAgent`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#newuseragent)
+    - Hid `Value` field and replaced with the getter
+* Reworked cookies:
+    - Removed `SetVisitorCode` method
+    - Removed `ObtainVisitorCode` method
+    - Removed parameter `topLevelDomain` from [`GetVisitorCode`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getvisitorcode). Instead, use the `top_level_domain` parameter in the [configuration](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#additional-configuration)
+    - Made [`GetVisitorCode`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getvisitorcode) return `(string, error)` pair.
+* Removed methods that were deprecated in 2.x versions:
+    - `RetrieveDataFromRemoteSource`
+* Removed visitor data max size:
+    - Removed `visitor_data_max_size` configuration field
+    - Removed `VisitorDataMaxSize` field from `Config`
+
+### Features
+* Added a [`SetLegalConsent`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#setlegalconsent) method to determine the types of data Kameleoon includes in tracking requests. This helps you adhere to legal and regulatory requirements while responsibly managing visitor data. You can find more information in the [Consent management policy](https://help.kameleoon.com/consent-management-policy/).
+* Implemented `KameleoonClientFactory`(https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#kameleoonclientfactory) to manage `KameleoonClient` instances:
+    - [`Create`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/create)
+    - [`CreateFromFile`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#createfromfile)
+    - [`Forget`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#forget)
+* Added [`WaitInit`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#waitinit) method to wait until the initialization process is completed
+* Added new parameters for `KameleoonClientConfig`:
+    - `SessionDuration` ([`session_duration`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#additional-configuration) configuration field accordingly)
+    - `TopLevelDomain` field to `Config` ([`top_level_domain`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#additional-configuration) configuration field accordingly)
+
+### Bug fixes
+* Stability and performance improvements
+
 ## 2.3.1 - 2023-10-03
 ### Features
 * Added support for older versions of the Go language. You can now use version 1.12 or later (previously, the minimum version was 1.16).

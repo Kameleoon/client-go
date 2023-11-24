@@ -1,8 +1,9 @@
 package conditions
 
 import (
-	"github.com/Kameleoon/client-go/v2/types"
-	"github.com/Kameleoon/client-go/v2/utils"
+	"github.com/Kameleoon/client-go/v3/storage"
+	"github.com/Kameleoon/client-go/v3/types"
+	"github.com/Kameleoon/client-go/v3/utils"
 )
 
 func NewConversionCondition(c types.TargetingCondition) *ConversionCondition {
@@ -21,8 +22,19 @@ type ConversionCondition struct {
 }
 
 func (c *ConversionCondition) CheckTargeting(targetData interface{}) bool {
-	conversion, ok := GetLastTargetingData(targetData, types.DataTypeConversion).(*types.Conversion)
-	return ok && (c.GoalId == 0 || c.GoalId == conversion.GoalId)
+	conversionStorage, ok := targetData.(storage.DataCollectionStorage[*types.Conversion])
+	if ok && (conversionStorage != nil) {
+		if c.GoalId == 0 {
+			return true
+		}
+		targeted := false
+		conversionStorage.Enumerate(func(conversion *types.Conversion) bool {
+			targeted = c.GoalId == conversion.GoalId()
+			return !targeted
+		})
+		return targeted
+	}
+	return false
 }
 
 func (c *ConversionCondition) String() string {

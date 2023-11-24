@@ -89,11 +89,6 @@ const (
 	OperatorIsAmongValues OperatorType = "AMONG_VALUES"
 )
 
-type TargetedDataExclusiveExperiment struct {
-	ExperimentId            int
-	VisitorVariationStorage map[int]int
-}
-
 type TargetedDataSdk struct {
 	Language string
 	Version  string

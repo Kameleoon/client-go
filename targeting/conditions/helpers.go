@@ -4,23 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/Kameleoon/client-go/v2/types"
 )
-
-func GetLastTargetingData(targetData interface{}, dataType types.DataType) interface{} {
-	if _, ok := targetData.([]types.TargetingData); !ok {
-		return nil
-	}
-
-	var lastData interface{}
-	for _, td := range targetData.([]types.TargetingData) {
-		if td.Data.DataType() == dataType {
-			lastData = td.Data
-		}
-	}
-	return lastData
-}
 
 func GetMajorMinorPatch(version string) (major, minor, patch int, err error) {
 	versions := []int{major, minor, patch}

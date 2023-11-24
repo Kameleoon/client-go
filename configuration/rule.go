@@ -1,8 +1,8 @@
 package configuration
 
 import (
-	"github.com/Kameleoon/client-go/v2/targeting"
-	"github.com/Kameleoon/client-go/v2/types"
+	"github.com/Kameleoon/client-go/v3/targeting"
+	"github.com/Kameleoon/client-go/v3/types"
 	"github.com/segmentio/encoding/json"
 )
 
@@ -56,9 +56,9 @@ func (r *Rule) GetTargetingSegment() *targeting.Segment {
 }
 
 func (r *Rule) IsExperimentType() bool {
-	return r.Type == string(types.RuleTypeExperimentation)
+	return r.Type == types.RuleTypeExperimentation
 }
 
 func (r *Rule) IsTargetDeliveryType() bool {
-	return r.Type == string(types.RuleTypeTargetedDelivery)
+	return r.Type == types.RuleTypeTargetedDelivery
 }
