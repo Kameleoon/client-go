@@ -176,6 +176,7 @@ func newClientInternal(siteCode string, cfg *KameleoonClientConfig, networkManag
 		siteCode:       siteCode,
 		cfg:            cfg,
 		readiness:      newKameleoonClientReadiness(),
+		dataFile:       configuration.NewDataFile(configuration.Configuration{}, cfg.Environment),
 		visitorManager: newVisitorManager(cfg),
 		hybridManager:  hybridManager,
 		networkManager: networkManager,

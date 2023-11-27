@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.0.2 - 2023-11-27
+### Bug fixes
+* Stability and performance improvements
+
 ## 3.0.1 - 2023-11-24
 ### Bug fixes
 * Stability and performance improvements
