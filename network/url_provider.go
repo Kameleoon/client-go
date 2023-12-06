@@ -13,7 +13,7 @@ const (
 	experimentsConfigurationsPath = "/visit/experimentsConfigurations"
 	getDataPath                   = "/map/map"
 	postDataPath                  = "/map/maps"
-	configurationApiUrlFormat     = "https://%s.kameleoon.eu/sdk-config"
+	configurationApiUrlFormat     = "https://sdk-config.kameleoon.eu/%s"
 	realTimeConfigurationUrl      = "https://events.kameleoon.com:8110/sse"
 	oauthTokenUrl                 = "https://api.kameleoon.com/oauth/token"
 )
