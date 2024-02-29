@@ -24,14 +24,7 @@ func (qb *QueryBuilder) Append(name string, value string) {
 }
 
 func (qb *QueryBuilder) String() string {
-	replacer := strings.NewReplacer(
-		"+", "%20",
-		"%21", "!",
-		"%2A", "*",
-		"%27", "'",
-		"%28", "(",
-		"%29", ")",
-	)
+	replacer := strings.NewReplacer("+", "%20")
 	return replacer.Replace(qb.params.Encode())
 }
 

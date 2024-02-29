@@ -23,20 +23,6 @@ type ConditionsFirstLevel struct {
 	Conditions  []TargetingCondition `json:"conditions"`
 }
 
-// const (
-// 	targetingConditionStaticFieldId                 = "id"
-// 	targetingConditionStaticFieldValue              = "value"
-// 	targetingConditionStaticFieldType               = "targetingType"
-// 	targetingConditionStaticFieldOperator           = "valueMatchType"
-// 	targetingConditionStaticFieldWeight             = "weight"
-// 	targetingConditionStaticFieldIndex              = "customDataIndex"
-// 	targetingConditionStaticFieldIsInclude          = "isInclude"
-// 	targetingConditionStaticFieldExperiment         = "experiment"
-// 	targetingConditionStaticFieldVariation          = "variation"
-// 	targetingConditionStaticFieldVariationMatchType = "variationMatchType"
-// 	targetingConditionStaticFieldBrowser            = "browser"
-// )
-
 type BrowserConditionType string
 
 const (
@@ -47,12 +33,6 @@ const (
 	BrowserConditionTypeOpera   BrowserConditionType = "OPERA"
 	BrowserConditionTypeOther   BrowserConditionType = "OTHER"
 )
-
-// var targetingConditionStaticFields = [...]string{targetingConditionStaticFieldValue,
-// 	targetingConditionStaticFieldType, targetingConditionStaticFieldOperator,
-// 	targetingConditionStaticFieldIndex, targetingConditionStaticFieldIsInclude, targetingConditionStaticFieldExperiment,
-// 	targetingConditionStaticFieldVariation, targetingConditionStaticFieldVariationMatchType,
-// 	targetingConditionStaticFieldBrowser, targetingConditionStaticFieldVersionMatchType}
 
 type TargetingConditionBase struct {
 	Type    TargetingType `json:"targetingType"`
@@ -78,44 +58,6 @@ type TargetingCondition struct {
 	Url                string               `json:"url,omitempty"`
 	GoalId             int                  `json:"goalId,omitempty"`
 }
-
-// func (c *TargetingCondition) UnmarshalJSON(b []byte) error {
-// 	rest := make(map[string]json.RawMessage)
-// 	if err := json.Unmarshal(b, &rest); err != nil {
-// 		return err
-// 	}
-// 	var err error
-// 	for _, field := range targetingConditionStaticFields {
-// 		value, exist := rest[field]
-// 		if !exist {
-// 			continue
-// 		}
-// 		switch field {
-// 		case targetingConditionStaticFieldType:
-// 			err = json.Unmarshal(value, &c.TargetingConditionBase.Type)
-// 		case targetingConditionStaticFieldValue:
-// 			err = json.Unmarshal(value, &c.Value)
-// 		case targetingConditionStaticFieldOperator:
-// 			err = json.Unmarshal(value, &c.Operator)
-// 		case targetingConditionStaticFieldIndex:
-// 			err = json.Unmarshal(value, &c.Index)
-// 		case targetingConditionStaticFieldIsInclude:
-// 			err = json.Unmarshal(value, &c.TargetingConditionBase.Include)
-// 		case targetingConditionStaticFieldExperiment:
-// 			err = json.Unmarshal(value, &c.Experiment)
-// 		case targetingConditionStaticFieldVariation:
-// 			err = json.Unmarshal(value, &c.Variation)
-// 		case targetingConditionStaticFieldVariationMatchType:
-// 			err = json.Unmarshal(value, &c.VariationMatchType)
-// 		case targetingConditionStaticFieldBrowser:
-// 			err = json.Unmarshal(value, &c.Browser)
-// 		}
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
 
 func (c *TargetingConditionBase) String() string {
 	var s strings.Builder

@@ -29,7 +29,9 @@ func NewPageViewWithTitle(url string, title string, referrers ...int) *PageView 
 	return pv
 }
 
-func (pv *PageView) dataRestriction() {}
+func (pv *PageView) dataRestriction() {
+	// This method is required to separate external type `Data` from `BaseData` types
+}
 
 func (pv *PageView) URL() string {
 	return pv.url

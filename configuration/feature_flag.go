@@ -26,7 +26,7 @@ func (ff FeatureFlag) GetVariationKey(varByExp *types.VariationByExposition, rul
 	if varByExp != nil {
 		return varByExp.VariationKey
 	} else if rule != nil && rule.IsExperimentType() {
-		return string(types.VARIATION_OFF)
+		return string(types.VariationOff)
 	} else {
 		return ff.DefaultVariationKey
 	}

@@ -28,7 +28,9 @@ func NewConversionWithRevenue(goalId int, revenue float64, negative ...bool) *Co
 	return c
 }
 
-func (c *Conversion) dataRestriction() {}
+func (c *Conversion) dataRestriction() {
+	// This method is required to separate external type `Data` from `BaseData` types
+}
 
 func (c *Conversion) GoalId() int {
 	return c.goalId

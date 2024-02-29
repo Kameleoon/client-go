@@ -4,38 +4,6 @@ import (
 	"time"
 )
 
-type WhenTimeoutType string
-
-const (
-	WhenTimeoutRun             WhenTimeoutType = "RUN"
-	WhenTimeoutDisableForPage  WhenTimeoutType = "DISABLE_FOR_PAGE"
-	WhenTimeoutDisableForVisit WhenTimeoutType = "DISABLE_FOR_VISIT"
-)
-
-type DataStorageType string
-
-const (
-	DataStorageStandardCookie DataStorageType = "STANDARD_COOKIE"
-	DataStorageLocalStorage   DataStorageType = "LOCAL_STORAGE"
-	DataStorageCustomCookie   DataStorageType = "CUSTOM_COOKIE"
-)
-
-type IndicatorType string
-
-const (
-	IndicatorsRetentionRate     IndicatorType = "RETENTION_RATE"
-	IndicatorsNumberOfPagesSeen IndicatorType = "NUMBER_OF_PAGES_SEEN"
-	IndicatorsDwellTime         IndicatorType = "DWELL_TIME"
-)
-
-type EventMethodType string
-
-const (
-	EventMethodClick     EventMethodType = "CLICK"
-	EventMethodMousedown EventMethodType = "MOUSEDOWN"
-	EventMethodMouseup   EventMethodType = "MOUSEUP"
-)
-
 type TimeNoTZ time.Time
 type TimeTZ struct {
 	time.Time

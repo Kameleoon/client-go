@@ -6,7 +6,7 @@ type VisitorCodeInvalid struct {
 	KameleoonError
 }
 
-func NewVisitorCodeInvalid(visitorCode string) *VisitorCodeInvalid {
-	msg := fmt.Sprintf("Visitor code '%s' is not valid", visitorCode)
+func NewVisitorCodeInvalid(errorDescription string) *VisitorCodeInvalid {
+	msg := fmt.Sprintf("Visitor code %s", errorDescription)
 	return &VisitorCodeInvalid{NewKameleoonError(msg)}
 }

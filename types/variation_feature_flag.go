@@ -3,7 +3,7 @@ package types
 type VariationDefaults string
 
 const (
-	VARIATION_OFF VariationDefaults = "off"
+	VariationOff VariationDefaults = "off"
 )
 
 type VariationFeatureFlag struct {

@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.1.0 - 2024-02-29
+### Features
+* Added support for additional Data API servers across the world for even faster network requests.
+* Increased limit for requests to Data API: [rate limits](https://developers.kameleoon.com/apis/data-api-rest/overview/#rate-limits)
+* Added [`GetVisitorWarehouseAudience`](https://developers.kameleoon.com/go-sdk.html#getvisitorwarehouseaudience) method to retrieve all data associated with a visitor's warehouse audiences and adds it to the visitor.
+
 ## 3.0.3 - 2023-12-06
 ### Bug fixes
 * Stability and performance improvements

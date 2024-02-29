@@ -53,8 +53,8 @@ func (cus *ConfigurationUpdateService) tryFetch(ts int64) (bool, error) {
 	}
 	if err := cus.fetchFunc(ts); err != nil {
 		cus.log("Fetch failed: %v", err)
-		if cus.settings.RealTimeUpdate {
-			cus.settings.RealTimeUpdate = false
+		if cus.settings.realTimeUpdate {
+			cus.settings.realTimeUpdate = false
 			cus.manageConfigurationUpdate()
 			cus.log("Switched to polling mode due to failed fetch")
 		}
@@ -135,7 +135,7 @@ func (cus *ConfigurationUpdateService) stopRealTimeConfigurationServiceIfNeeded(
 }
 
 func (cus *ConfigurationUpdateService) manageConfigurationUpdate() {
-	if cus.settings.RealTimeUpdate {
+	if cus.settings.realTimeUpdate {
 		cus.stopPollingConfigurationTickerIfNeeded()
 		cus.startRealTimeConfigurationServiceIfNeeded()
 	} else {

@@ -13,9 +13,9 @@ const (
 
 func ValidateVisitorCode(visitorCode string) error {
 	if visitorCode == "" {
-		return errs.NewVisitorCodeInvalid("empty visitor code")
+		return errs.NewVisitorCodeInvalid("is empty")
 	} else if len(visitorCode) > VisitorCodeMaxLength {
-		msg := fmt.Sprintf("visitor code is longer than %d chars", VisitorCodeMaxLength)
+		msg := fmt.Sprintf("is longer than %d chars", VisitorCodeMaxLength)
 		return errs.NewVisitorCodeInvalid(msg)
 	}
 	return nil

@@ -22,7 +22,9 @@ func NewCustomData(id int, values ...string) *CustomData {
 	}
 }
 
-func (cd *CustomData) dataRestriction() {}
+func (cd *CustomData) dataRestriction() {
+	// This method is required to separate external type `Data` from `BaseData` types
+}
 
 func (cd *CustomData) ID() int {
 	return cd.id

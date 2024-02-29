@@ -24,7 +24,7 @@ type ConversionCondition struct {
 func (c *ConversionCondition) CheckTargeting(targetData interface{}) bool {
 	conversionStorage, ok := targetData.(storage.DataCollectionStorage[*types.Conversion])
 	if ok && (conversionStorage != nil) {
-		if c.GoalId == 0 {
+		if c.GoalId == 0 && conversionStorage.Len() > 0 {
 			return true
 		}
 		targeted := false

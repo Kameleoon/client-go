@@ -27,14 +27,15 @@ const (
 )
 
 type Request struct {
-	Method      HttpMethod        // mandatory
-	Url         string            // mandatory
-	ContentType ContentType       // optional ("")
-	AuthToken   string            // optional ("")
-	Timeout     time.Duration     // mandatory
-	UserAgent   string            // optional ("")
-	Data        string            // optional ("")
-	Headers     map[string]string // optional
+	Method         HttpMethod        // mandatory
+	Url            string            // mandatory
+	ContentType    ContentType       // optional ("")
+	Timeout        time.Duration     // mandatory
+	UserAgent      string            // optional ("")
+	Data           string            // optional ("")
+	Headers        map[string]string // optional
+	AccessToken    string            // optional ("")
+	IsAuthRequired bool              // optional (false)
 }
 
 // response
@@ -110,8 +111,8 @@ func (np *NetProviderImpl) setHeaders(req *fasthttp.Request, request *Request) {
 			req.Header.Set(key, value)
 		}
 	}
-	if len(request.AuthToken) > 0 {
-		req.Header.Set(AuthorizationHeader, request.AuthToken)
+	if len(request.AccessToken) > 0 {
+		req.Header.Set(AuthorizationHeader, "Bearer "+request.AccessToken)
 	}
 	if len(request.ContentType) > 0 {
 		req.Header.SetContentType(string(request.ContentType))

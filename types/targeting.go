@@ -64,15 +64,6 @@ const (
 	TargetingVisitorCode            TargetingType = "VISITOR_CODE"
 )
 
-type TargetingConfigurationType string
-
-const (
-	TargetingConfigurationSite          TargetingConfigurationType = "SITE"
-	TargetingConfigurationPage          TargetingConfigurationType = "PAGE"
-	TargetingConfigurationURL           TargetingConfigurationType = "URL"
-	TargetingConfigurationSavedTemplate TargetingConfigurationType = "SAVED_TEMPLATE"
-)
-
 type OperatorType string
 
 const (

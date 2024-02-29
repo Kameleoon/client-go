@@ -6,13 +6,13 @@ import (
 )
 
 func (c *kameleoonClient) isConsentProvided(visitor storage.Visitor) bool {
-	return !c.dataFile.Settings().IsConsentRequired || ((visitor != nil) && visitor.LegalConsent())
+	return !c.dataFile.Settings().IsConsentRequired() || ((visitor != nil) && visitor.LegalConsent())
 }
 
 func (c *kameleoonClient) sendTrackingRequest(visitorCode string, visitor storage.Visitor, forceRequest bool) {
 	if visitor == nil {
 		visitor = c.visitorManager.GetVisitor(visitorCode)
-		if (visitor == nil) && c.dataFile.Settings().IsConsentRequired {
+		if (visitor == nil) && c.dataFile.Settings().IsConsentRequired() {
 			return
 		}
 	}
@@ -43,9 +43,8 @@ func (c *kameleoonClient) makeTrackingRequest(visitorCode string, userAgent stri
 	if len(data) == 0 {
 		return false
 	}
-	token := c.token
 	c.log("Start post to tracking")
-	out, err := c.networkManager.SendTrackingData(visitorCode, data, userAgent, token, -1)
+	out, err := c.networkManager.SendTrackingData(visitorCode, data, userAgent)
 	if err != nil {
 		c.log("Failed to post tracking data, error: %v", err)
 		return false

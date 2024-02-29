@@ -5,7 +5,6 @@ import (
 
 	"github.com/Kameleoon/client-go/v3/errs"
 	"github.com/Kameleoon/client-go/v3/logging"
-	"github.com/Kameleoon/client-go/v3/network"
 	"github.com/cristalhq/aconfig"
 	"github.com/cristalhq/aconfig/aconfigyaml"
 )
@@ -19,20 +18,18 @@ const (
 )
 
 type KameleoonClientConfig struct {
-	defaultsApplied  bool
-	Network          NetworkConfig
-	Logger           logging.Logger `yml:"-" yaml:"-"`
-	ProxyURL         string         `yml:"proxy_url" yaml:"proxy_url"`
-	ClientID         string         `yml:"client_id" yaml:"client_id"`
-	ClientSecret     string         `yml:"client_secret" yaml:"client_secret"`
-	RefreshInterval  time.Duration  `yml:"refresh_interval" yaml:"refresh_interval" default:"1h"`
-	DefaultTimeout   time.Duration  `yml:"default_timeout" yaml:"default_timeout" default:"10s"`
-	VerboseMode      bool           `yml:"verbose_mode" yaml:"verbose_mode"`
-	SessionDuration  time.Duration  `yml:"session_duration" yaml:"session_duration" default:"30m"`
-	TopLevelDomain   string         `yml:"top_level_domain" yaml:"top_level_domain"`
-	Environment      string         `yml:"environment" yaml:"environment"`
-	UserAgentMaxSize int            `yml:"-" yaml:"-"`
-	dataApiUrl       string
+	defaultsApplied bool
+	Network         NetworkConfig
+	Logger          logging.Logger `yml:"-" yaml:"-"`
+	ProxyURL        string         `yml:"proxy_url" yaml:"proxy_url"`
+	ClientID        string         `yml:"client_id" yaml:"client_id"`
+	ClientSecret    string         `yml:"client_secret" yaml:"client_secret"`
+	RefreshInterval time.Duration  `yml:"refresh_interval" yaml:"refresh_interval" default:"1h"`
+	DefaultTimeout  time.Duration  `yml:"default_timeout" yaml:"default_timeout" default:"10s"`
+	VerboseMode     bool           `yml:"verbose_mode" yaml:"verbose_mode"`
+	SessionDuration time.Duration  `yml:"session_duration" yaml:"session_duration" default:"30m"`
+	TopLevelDomain  string         `yml:"top_level_domain" yaml:"top_level_domain"`
+	Environment     string         `yml:"environment" yaml:"environment"`
 }
 
 func LoadConfig(path string) (*KameleoonClientConfig, error) {
@@ -56,26 +53,23 @@ func (c *KameleoonClientConfig) defaults() error {
 	if c.Logger == nil {
 		c.defaultLogger()
 	}
-	if len(c.dataApiUrl) == 0 {
-		c.dataApiUrl = network.DefaultDataApiUrl
-	}
 	if c.RefreshInterval < time.Minute {
 		if c.RefreshInterval != 0 {
-			c.Logger.Printf("Kameloon SDK: Config update interval must not be less than a minute."+
+			c.Logger.Printf("Kameleoon SDK: Config update interval must not be less than a minute."+
 				"Default config update interval (%d minutes) is applied", int(DefaultRefreshInterval.Minutes()))
 		}
 		c.RefreshInterval = DefaultRefreshInterval
 	}
 	if c.DefaultTimeout <= 0 {
 		if c.DefaultTimeout != 0 {
-			c.Logger.Printf("Kameloon SDK: Default timeout must have positive value."+
+			c.Logger.Printf("Kameleoon SDK: Default timeout must have positive value."+
 				"Default default timeout (%d ms) is applied", DefaultRequestTimeout.Milliseconds())
 		}
 		c.DefaultTimeout = DefaultRequestTimeout
 	}
 	if c.SessionDuration <= 0 {
 		if c.SessionDuration != 0 {
-			c.Logger.Printf("Kameloon SDK: Session duration must have positive value."+
+			c.Logger.Printf("Kameleoon SDK: Session duration must have positive value."+
 				"Default session duration (%d minutes) is applied", int(DefaultSessionDuration.Minutes()))
 		}
 		c.SessionDuration = DefaultSessionDuration

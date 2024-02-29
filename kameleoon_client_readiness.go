@@ -40,7 +40,7 @@ func (r *kameleoonClientReadiness) Error() error {
 func (r *kameleoonClientReadiness) Wait() error {
 	if r.isInitializing {
 		r.cond.RLock()
-		r.cond.RUnlock()
+		defer r.cond.RUnlock()
 	}
 	return r.err
 }
