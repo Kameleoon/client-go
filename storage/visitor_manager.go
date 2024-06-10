@@ -3,32 +3,44 @@ package storage
 import (
 	"time"
 
+	"github.com/Kameleoon/client-go/v3/logging"
+	"github.com/Kameleoon/client-go/v3/types"
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
 type VisitorManager interface {
+	CustomDataInfo() *types.CustomDataInfo
+	SetCustomDataInfo(value *types.CustomDataInfo)
+
 	GetVisitor(visitorCode string) Visitor
 	GetOrCreateVisitor(visitorCode string) Visitor
 
+	AddData(visitorCode string, data ...types.Data) Visitor
+
 	Enumerate(f func(string, Visitor) bool)
 	Len() int
+
+	Clear()
 
 	Close()
 }
 
 type VisitorManagerImpl struct {
+	customDataInfo   *types.CustomDataInfo
 	visitors         cmap.ConcurrentMap[string, *VisitorImpl]
 	expirationPeriod time.Duration
 	purgeTicker      *time.Ticker
 	stopChan         chan struct{}
+	logger           logging.Logger
 }
 
-func NewVisitorManagerImpl(expirationPeriod time.Duration) *VisitorManagerImpl {
+func NewVisitorManagerImpl(expirationPeriod time.Duration, logger logging.Logger) *VisitorManagerImpl {
 	vm := &VisitorManagerImpl{
 		visitors:         cmap.New[*VisitorImpl](),
 		expirationPeriod: expirationPeriod,
 		purgeTicker:      time.NewTicker(expirationPeriod),
 		stopChan:         make(chan struct{}),
+		logger:           logger,
 	}
 	go func() {
 		for {
@@ -45,6 +57,13 @@ func NewVisitorManagerImpl(expirationPeriod time.Duration) *VisitorManagerImpl {
 
 func (vm *VisitorManagerImpl) ExpirationPeriod() time.Duration {
 	return vm.expirationPeriod
+}
+
+func (vm *VisitorManagerImpl) CustomDataInfo() *types.CustomDataInfo {
+	return vm.customDataInfo
+}
+func (vm *VisitorManagerImpl) SetCustomDataInfo(value *types.CustomDataInfo) {
+	vm.customDataInfo = value
 }
 
 func (vm *VisitorManagerImpl) Close() {
@@ -69,7 +88,11 @@ func (vm *VisitorManagerImpl) GetVisitor(visitorCode string) Visitor {
 	})
 	return visitor
 }
+
 func (vm *VisitorManagerImpl) GetOrCreateVisitor(visitorCode string) Visitor {
+	return vm.getOrCreateVisitor(visitorCode)
+}
+func (vm *VisitorManagerImpl) getOrCreateVisitor(visitorCode string) *VisitorImpl {
 	return vm.visitors.Upsert(visitorCode, nil, func(exist bool, former, _ *VisitorImpl) *VisitorImpl {
 		if former != nil {
 			former.UpdateLastActivityTime()
@@ -77,6 +100,44 @@ func (vm *VisitorManagerImpl) GetOrCreateVisitor(visitorCode string) Visitor {
 		}
 		return NewVisitorImpl()
 	})
+}
+
+func (vm *VisitorManagerImpl) AddData(visitorCode string, data ...types.Data) Visitor {
+	visitor := vm.getOrCreateVisitor(visitorCode)
+	cdi := vm.customDataInfo
+	if cdi != nil {
+		for _, d := range data {
+			if cd, ok := d.(*types.CustomData); ok {
+				vm.handleCustomData(visitorCode, visitor, cdi, cd)
+			}
+		}
+	}
+	visitor.AddData(vm.logger, data...)
+	return visitor
+}
+func (vm *VisitorManagerImpl) handleCustomData(
+	visitorCode string,
+	visitor *VisitorImpl,
+	cdi *types.CustomDataInfo,
+	cd *types.CustomData,
+) {
+	// We shouldn't send custom data with local only type
+	if cdi.IsLocalOnly(cd.ID()) {
+		cd.MarkAsSent()
+	}
+	// If mappingIdentifier is passed, we should link anonymous visitor with real unique userId.
+	// After authorization, customer must be able to continue work with userId, but hash for variation
+	// should be calculated based on anonymous visitor code, that's why set MappingIdentifier to visitor.
+	if cdi.IsMappingIdentifier(cd.ID()) && (len(cd.Values()) > 0) {
+		targetVisitorCode := cd.Values()[0]
+		if targetVisitorCode != "" {
+			cd.SetIsMappingIdentifier(true)
+			visitor.SetMappingIdentifier(&visitorCode)
+			if visitorCode != targetVisitorCode {
+				vm.visitors.Set(targetVisitorCode, visitor)
+			}
+		}
+	}
 }
 
 func (vm *VisitorManagerImpl) Enumerate(f func(string, Visitor) bool) {
@@ -109,4 +170,8 @@ func (vm *VisitorManagerImpl) purge() {
 			return v.LastActivityTime().Before(expiredDT)
 		})
 	}
+}
+
+func (vm *VisitorManagerImpl) Clear() {
+	vm.visitors.Clear()
 }

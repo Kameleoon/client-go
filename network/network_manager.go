@@ -36,8 +36,10 @@ type NetworkManager interface {
 
 	// Data API
 	GetRemoteData(key string, timeout time.Duration) (json.RawMessage, error)
-	GetRemoteVisitorData(visitorCode string, timeout time.Duration) (json.RawMessage, error)
-	SendTrackingData(visitorCode string, lines []types.Sendable, userAgent string) (bool, error)
+	GetRemoteVisitorData(visitorCode string, filter types.RemoteVisitorDataFilter, isUniqueIdentifier bool,
+		timeout time.Duration) (json.RawMessage, error)
+	SendTrackingData(visitorCode string, lines []types.Sendable, userAgent string,
+		isUniqueIdentifier bool) (bool, error)
 }
 
 // base implementation

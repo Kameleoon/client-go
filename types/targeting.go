@@ -58,10 +58,11 @@ const (
 	TargetingVisitedPages           TargetingType = "VISITED_PAGES"
 	TargetingMeanPageDuration       TargetingType = "MEAN_PAGE_DURATION"
 	TargetingTimeSincePreviousVisit TargetingType = "TIME_SINCE_PREVIOUS_VISIT"
-	TargetingTargetExperiment       TargetingType = "TARGET_EXPERIMENT"
-	TargetingExclusiveExperiment    TargetingType = "EXCLUSIVE_EXPERIMENT"
+	TargetingTargetFeatureFlag      TargetingType = "TARGET_FEATURE_FLAG"
+	TargetingExclusiveFeatureFlag   TargetingType = "EXCLUSIVE_FEATURE_FLAG"
 	TargetingSDKLanguage            TargetingType = "SDK_LANGUAGE"
 	TargetingVisitorCode            TargetingType = "VISITOR_CODE"
+	TargetingSegment                TargetingType = "SEGMENT"
 )
 
 type OperatorType string
@@ -84,3 +85,5 @@ type TargetedDataSdk struct {
 	Language string
 	Version  string
 }
+
+type TargetingDataGetter func(TargetingType) interface{}

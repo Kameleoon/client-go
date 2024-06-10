@@ -17,6 +17,24 @@ const (
 	BrowserTypeOther   BrowserType = 5
 )
 
+func ParseBrowserType(s string) (BrowserType, bool) {
+	switch s {
+	case "CHROME":
+		return BrowserTypeChrome, true
+	case "INTERNET_EXPLORER":
+		return BrowserTypeIE, true
+	case "FIREFOX":
+		return BrowserTypeFirefox, true
+	case "SAFARI":
+		return BrowserTypeSafari, true
+	case "OPERA":
+		return BrowserTypeOpera, true
+	case "OTHER":
+		return BrowserTypeOther, true
+	}
+	return -1, false
+}
+
 const browserEventType = "staticData"
 
 type Browser struct {

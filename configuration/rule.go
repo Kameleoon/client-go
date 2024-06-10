@@ -7,7 +7,7 @@ import (
 )
 
 type Rule struct {
-	types.Rule
+	types.RuleBase
 	TargetingSegment *targeting.Segment `json:"-"`
 }
 
@@ -61,4 +61,12 @@ func (r *Rule) IsExperimentType() bool {
 
 func (r *Rule) IsTargetDeliveryType() bool {
 	return r.Type == types.RuleTypeTargetedDelivery
+}
+
+func (r *Rule) GetRuleBase() *types.RuleBase {
+	return &r.RuleBase
+}
+
+func (r *Rule) GetSegment() types.Segment {
+	return r.TargetingSegment
 }

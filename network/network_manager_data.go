@@ -24,8 +24,10 @@ func (nm *NetworkManagerImpl) GetRemoteData(key string, timeout time.Duration) (
 	return nm.makeCall(&request, NetworkCallAttemptsNumberUncritical, -1)
 }
 
-func (nm *NetworkManagerImpl) GetRemoteVisitorData(visitorCode string, timeout time.Duration) (json.RawMessage, error) {
-	url := nm.UrlProvider.MakeVisitorDataGetUrl(visitorCode)
+func (nm *NetworkManagerImpl) GetRemoteVisitorData(
+	visitorCode string, filter types.RemoteVisitorDataFilter, isUniqueIdentifier bool, timeout time.Duration,
+) (json.RawMessage, error) {
+	url := nm.UrlProvider.MakeVisitorDataGetUrl(visitorCode, filter, isUniqueIdentifier)
 	request := Request{
 		Method:         HttpGet,
 		Url:            url,
@@ -36,13 +38,13 @@ func (nm *NetworkManagerImpl) GetRemoteVisitorData(visitorCode string, timeout t
 	return nm.makeCall(&request, NetworkCallAttemptsNumberUncritical, -1)
 }
 
-func (nm *NetworkManagerImpl) SendTrackingData(visitorCode string, lines []types.Sendable,
-	userAgent string) (bool, error) {
-
+func (nm *NetworkManagerImpl) SendTrackingData(
+	visitorCode string, lines []types.Sendable, userAgent string, isUniqueIdentifier bool,
+) (bool, error) {
 	if len(lines) == 0 {
 		return false, nil
 	}
-	url := nm.UrlProvider.MakeTrackingUrl(visitorCode)
+	url := nm.UrlProvider.MakeTrackingUrl(visitorCode, isUniqueIdentifier)
 	data := formTrackingRequestData(lines)
 	request := Request{
 		Method:         HttpPost,

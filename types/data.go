@@ -19,5 +19,11 @@ const (
 	DataTypeConversion        DataType = "CONVERSION"
 	DataTypeDevice            DataType = "DEVICE"
 	DataTypePageView          DataType = "PAGE_VIEW"
+	DataTypePageViewVisit     DataType = "PAGE_VIEW_VISIT"
 	DataTypeUserAgent         DataType = "USER_AGENT"
+	DataTypeCookie            DataType = "COOKIE"
+	DataTypeGeolocation       DataType = "GEOLOCATION"
+	DataTypeOperatingSystem   DataType = "OPERATING_SYSTEM"
+	DataTypeVisitorVisits     DataType = "VISITOR_VISITS"
+	DataTypeKcsHeat           DataType = "KCS_HEAT"
 )

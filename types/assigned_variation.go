@@ -26,6 +26,17 @@ func NewAssignedVariation(experimentId int, variationId int, ruleType RuleType) 
 	}
 }
 
+func NewAssignedVariationWithTime(
+	experimentId int, variationId int, ruleType RuleType, assignmentTime time.Time,
+) *AssignedVariation {
+	return &AssignedVariation{
+		experimentId:   experimentId,
+		variationId:    variationId,
+		ruleType:       ruleType,
+		assignmentTime: assignmentTime,
+	}
+}
+
 func (av *AssignedVariation) ExperimentId() int {
 	return av.experimentId
 }

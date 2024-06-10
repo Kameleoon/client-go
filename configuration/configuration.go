@@ -1,6 +1,9 @@
 package configuration
 
+import "github.com/Kameleoon/client-go/v3/types"
+
 type Configuration struct {
-	Settings     Settings      `json:"configuration"`
-	FeatureFlags []FeatureFlag `json:"featureFlags"`
+	CustomDataInfo *types.CustomDataInfo `json:"customData"`
+	Settings       Settings              `json:"configuration"`
+	FeatureFlags   []FeatureFlag         `json:"featureFlags"`
 }

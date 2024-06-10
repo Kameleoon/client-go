@@ -7,22 +7,34 @@ import (
 	"github.com/Kameleoon/client-go/v3/configuration"
 	"github.com/Kameleoon/client-go/v3/errs"
 	"github.com/Kameleoon/client-go/v3/managers/hybrid"
+	"github.com/Kameleoon/client-go/v3/managers/remotedata"
 	"github.com/Kameleoon/client-go/v3/managers/warehouse"
 	"github.com/Kameleoon/client-go/v3/network"
 	"github.com/Kameleoon/client-go/v3/network/cookie"
 	"github.com/Kameleoon/client-go/v3/storage"
-	"github.com/Kameleoon/client-go/v3/targeting/conditions"
+	"github.com/Kameleoon/client-go/v3/targeting"
 	"github.com/Kameleoon/client-go/v3/types"
 	"github.com/Kameleoon/client-go/v3/utils"
 	"github.com/segmentio/encoding/json"
 	"github.com/valyala/fasthttp"
 )
 
+// Deprecated: Please use `VisitorWarehouseAudienceOptParams` instead
 type VisitorWarehouseAudienceParams struct {
 	VisitorCode     string
 	CustomDataIndex int
 	WarehouseKey    string        // optional
 	Timeout         time.Duration // optional
+}
+
+type VisitorWarehouseAudienceOptParams struct {
+	WarehouseKey string
+	Timeout      time.Duration
+}
+
+type RemoteVisitorDataOptParams struct {
+	IsUniqueIdentifier bool
+	Timeout            time.Duration
 }
 
 type KameleoonClient interface {
@@ -57,16 +69,16 @@ type KameleoonClient interface {
 	// This method requires visitorCode and goalID to track conversion on this particular goal.
 	// In addition, this method also accepts revenue as a third optional argument to track revenue.
 	// This method is non-blocking as the server call is made asynchronously.
-	TrackConversion(visitorCode string, goalID int) error
+	TrackConversion(visitorCode string, goalID int, isUniqueIdentifier ...bool) error
 
-	TrackConversionRevenue(visitorCode string, goalID int, revenue float64) error
+	TrackConversionRevenue(visitorCode string, goalID int, revenue float64, isUniqueIdentifier ...bool) error
 
 	// FlushVisitor the associated data.
 	//
 	// The data added with the method AddData, is not directly sent to the kameleoon servers.
 	// It's stored and accumulated until it is sent automatically by the TriggerExperiment or TrackConversion methods.
 	// With this method you can manually send it.
-	FlushVisitor(visitorCode string) error
+	FlushVisitor(visitorCode string, isUniqueIdentifier ...bool) error
 
 	FlushAll()
 
@@ -80,7 +92,7 @@ type KameleoonClient interface {
 	// returns FeatureNotFound error
 	// returns VisitorCodeNotValid error
 	// returns FeatureEnvironmentDisabled error
-	GetFeatureVariationKey(visitorCode string, featureKey string) (string, error)
+	GetFeatureVariationKey(visitorCode string, featureKey string, isUniqueIdentifier ...bool) (string, error)
 
 	// GetFeatureVariable retrieves a feature variable value from assigned for visitor variation
 	//
@@ -91,7 +103,9 @@ type KameleoonClient interface {
 	// returns FeatureEnvironmentDisabled error
 	// returns FeatureVariableNotFound error
 	// returns VariationNotFound error
-	GetFeatureVariable(visitorCode string, featureKey string, variableKey string) (interface{}, error)
+	GetFeatureVariable(
+		visitorCode string, featureKey string, variableKey string, isUniqueIdentifier ...bool,
+	) (interface{}, error)
 
 	// IsFeatureActive checks if feature is active for a visitor or not
 	// (returns true / false instead of variation key)
@@ -103,7 +117,7 @@ type KameleoonClient interface {
 	//
 	// returns FeatureNotFound error
 	// returns VisitorCodeNotValid
-	IsFeatureActive(visitorCode string, featureKey string) (bool, error)
+	IsFeatureActive(visitorCode string, featureKey string, isUniqueIdentifier ...bool) (bool, error)
 
 	// GetFeatureVariationVariables retrieves all feature variable values for a given variation
 	//
@@ -135,19 +149,46 @@ type KameleoonClient interface {
 	// confirming that the data has been added to the visitor and is available for targeting purposes.
 	//
 	// Parameters:
-	// - visitorCode: The unique identifier of the visitor for whom you want to retrieve and add the
+	// - VisitorCode: The unique identifier of the visitor for whom you want to retrieve and add the
 	//   data.
-	// - warehouseKey: The key to identify the warehouse data, typically your internal user ID. The values is optional.
-	// - customDataIndex: An integer representing the index of the custom data you want to use to
+	// - WarehouseKey: The key to identify the warehouse data, typically your internal user ID. The values is optional.
+	// - CustomDataIndex: An integer representing the index of the custom data you want to use to
 	//   target your BigQuery Audiences.
-	// - timeout: Time to wait for the response
+	// - Timeout: Time to wait for the response
 	//
 	// Returns:
 	// - A `CustomData` instance confirming that the data has been added to the visitor.
 	// - An error if the visitor code is empty or longer than 255 characters.
 	GetVisitorWarehouseAudience(params VisitorWarehouseAudienceParams) (*types.CustomData, error)
 
+	// GetVisitorWarehouseAudienceWithOptParams retrieves data associated with a visitor's warehouse audiences and adds
+	// it to the visitor. Retrieves all audience data associated with the visitor in your data warehouse using the
+	// specified `visitorCode` and `warehouseKey`. The `warehouseKey` is typically your internal user
+	// ID. The `customDataIndex` parameter corresponds to the Kameleoon custom data that Kameleoon uses
+	// to target your visitors. You can refer to the
+	// warehouse targeting documentation (https://help.kameleoon.com/warehouse-audience-targeting/)
+	// for additional details. The method passes the result to the returned `CustomData` object,
+	// confirming that the data has been added to the visitor and is available for targeting purposes.
+	//
+	// Parameters:
+	// - visitorCode: The unique identifier of the visitor for whom you want to retrieve and add the
+	//   data.
+	// - customDataIndex: An integer representing the index of the custom data you want to use to
+	//   target your BigQuery Audiences.
+	// - params: An object with optional parameters: WarehouseKey and Timeout
+	//
+	// Returns:
+	// - A `CustomData` instance confirming that the data has been added to the visitor.
+	// - An error if the visitor code is empty or longer than 255 characters.
+	GetVisitorWarehouseAudienceWithOptParams(
+		visitorCode string, customDataIndex int, params ...VisitorWarehouseAudienceOptParams,
+	) (*types.CustomData, error)
+
 	GetRemoteVisitorData(visitorCode string, addData bool, timeout ...time.Duration) ([]types.Data, error)
+
+	GetRemoteVisitorDataWithOptParams(
+		visitorCode string, addData bool, filter types.RemoteVisitorDataFilter, params ...RemoteVisitorDataOptParams,
+	) ([]types.Data, error)
 
 	OnUpdateConfiguration(handler func())
 
@@ -163,12 +204,14 @@ type KameleoonClient interface {
 }
 
 type kameleoonClient struct {
-	cfg              *KameleoonClientConfig
-	visitorManager   storage.VisitorManager
-	networkManager   network.NetworkManager
-	cookieManager    cookie.CookieManager
-	hybridManager    hybrid.HybridManager
-	warehouseManager warehouse.WarehouseManager
+	cfg               *KameleoonClientConfig
+	visitorManager    storage.VisitorManager
+	networkManager    network.NetworkManager
+	cookieManager     cookie.CookieManager
+	hybridManager     hybrid.HybridManager
+	warehouseManager  warehouse.WarehouseManager
+	targetingManager  targeting.TargetingManager
+	remoteDataManager remotedata.RemoteDataManager
 
 	m                          sync.Mutex
 	readiness                  *kameleoonClientReadiness
@@ -196,29 +239,39 @@ func newClient(siteCode string, cfg *KameleoonClientConfig) (*kameleoonClient, e
 		cfg.Logger.Printf("HybridManager isn't initialized properly, " +
 			"GetEngineTrackingCode method isn't available for call")
 	}
-	client := newClientInternal(cfg, nm, vm, hm)
+	tm := targeting.NewTargetingManager(vm)
+	rdm := remotedata.NewRemoteDataManager(nm, vm, cfg.Logger)
+	client := newClientInternal(cfg, nm, vm, hm, tm, rdm)
 	return client, nil
 }
 
-func newClientInternal(cfg *KameleoonClientConfig, networkManager network.NetworkManager,
-	visitorManager storage.VisitorManager, hybridManager hybrid.HybridManager) *kameleoonClient {
-
+func newClientInternal(
+	cfg *KameleoonClientConfig,
+	networkManager network.NetworkManager,
+	visitorManager storage.VisitorManager,
+	hybridManager hybrid.HybridManager,
+	targetingManager targeting.TargetingManager,
+	remoteDataManager remotedata.RemoteDataManager,
+) *kameleoonClient {
 	client := &kameleoonClient{
-		cfg:              cfg,
-		readiness:        newKameleoonClientReadiness(),
-		dataFile:         configuration.NewDataFile(configuration.Configuration{}, cfg.Environment),
-		visitorManager:   visitorManager,
-		hybridManager:    hybridManager,
-		networkManager:   networkManager,
-		cookieManager:    cookie.NewCookieManagerImpl(cfg.TopLevelDomain),
-		warehouseManager: warehouse.NewWarehouseManagerImpl(networkManager, visitorManager, cfg.Logger),
+		cfg:               cfg,
+		readiness:         newKameleoonClientReadiness(),
+		dataFile:          configuration.NewDataFile(configuration.Configuration{}, cfg.Environment),
+		visitorManager:    visitorManager,
+		hybridManager:     hybridManager,
+		networkManager:    networkManager,
+		cookieManager:     cookie.NewCookieManagerImpl(cfg.TopLevelDomain),
+		warehouseManager:  warehouse.NewWarehouseManagerImpl(networkManager, visitorManager, cfg.Logger),
+		targetingManager:  targetingManager,
+		remoteDataManager: remoteDataManager,
 	}
+	client.targetingManager.SetDataFile(client.dataFile)
 	go client.updateConfigInitially()
 	return client
 }
 
 func newVisitorManager(cfg *KameleoonClientConfig) storage.VisitorManager {
-	return storage.NewVisitorManagerImpl(cfg.SessionDuration)
+	return storage.NewVisitorManagerImpl(cfg.SessionDuration, nil)
 }
 
 func (c *kameleoonClient) WaitInit() error {
@@ -261,20 +314,31 @@ func (c *kameleoonClient) AddData(visitorCode string, allData ...types.Data) err
 	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
 		return err
 	}
-	v := c.visitorManager.GetOrCreateVisitor(visitorCode)
-	v.AddData(c.cfg.Logger, allData...)
+	c.visitorManager.AddData(visitorCode, allData...)
 	return nil
 }
 
-func (c *kameleoonClient) TrackConversion(visitorCode string, goalID int) error {
-	return c.trackConversion(visitorCode, goalID)
+func (c *kameleoonClient) TrackConversion(visitorCode string, goalID int, isUniqueIdentifier ...bool) error {
+	var isUniqueIdentifierValue bool
+	if len(isUniqueIdentifier) > 0 {
+		isUniqueIdentifierValue = isUniqueIdentifier[0]
+	}
+	return c.trackConversion(visitorCode, isUniqueIdentifierValue, goalID)
 }
 
-func (c *kameleoonClient) TrackConversionRevenue(visitorCode string, goalID int, revenue float64) error {
-	return c.trackConversion(visitorCode, goalID, revenue)
+func (c *kameleoonClient) TrackConversionRevenue(
+	visitorCode string, goalID int, revenue float64, isUniqueIdentifier ...bool,
+) error {
+	var isUniqueIdentifierValue bool
+	if len(isUniqueIdentifier) > 0 {
+		isUniqueIdentifierValue = isUniqueIdentifier[0]
+	}
+	return c.trackConversion(visitorCode, isUniqueIdentifierValue, goalID, revenue)
 }
 
-func (c *kameleoonClient) trackConversion(visitorCode string, goalID int, revenue ...float64) error {
+func (c *kameleoonClient) trackConversion(
+	visitorCode string, isUniqueIdentifier bool, goalID int, revenue ...float64,
+) error {
 	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
 		return err
 	}
@@ -285,32 +349,44 @@ func (c *kameleoonClient) trackConversion(visitorCode string, goalID int, revenu
 		conv = types.NewConversion(goalID)
 	}
 	c.AddData(visitorCode, conv)
-	c.FlushVisitor(visitorCode)
+	c.FlushVisitor(visitorCode, isUniqueIdentifier)
 	return nil
 }
 
-func (c *kameleoonClient) FlushVisitor(visitorCode string) error {
+func (c *kameleoonClient) FlushVisitor(visitorCode string, isUniqueIdentifier ...bool) error {
 	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
 		return err
 	}
-	c.sendTrackingRequest(visitorCode, nil, true)
+	var isUniqueIdentifierValue bool
+	if len(isUniqueIdentifier) > 0 {
+		isUniqueIdentifierValue = isUniqueIdentifier[0]
+	}
+	c.sendTrackingRequest(visitorCode, nil, true, isUniqueIdentifierValue)
 	return nil
 }
 
 func (c *kameleoonClient) FlushAll() {
 	c.visitorManager.Enumerate(func(vc string, v storage.Visitor) bool {
-		c.sendTrackingRequest(vc, v, false)
+		c.sendTrackingRequest(vc, v, false, false)
 		return true
 	})
 }
 
-func (c *kameleoonClient) GetFeatureVariationKey(visitorCode string, featureKey string) (string, error) {
-	_, variationKey, err := c.getFeatureVariationKey(visitorCode, featureKey)
+func (c *kameleoonClient) GetFeatureVariationKey(
+	visitorCode string, featureKey string, isUniqueIdentifier ...bool,
+) (string, error) {
+	var isUniqueIdentifierValue bool
+	if len(isUniqueIdentifier) > 0 {
+		isUniqueIdentifierValue = isUniqueIdentifier[0]
+	}
+	_, variationKey, err := c.getFeatureVariationKey(visitorCode, isUniqueIdentifierValue, featureKey)
 	return variationKey, err
 }
 
 // getFeatureVariationKey is a helper method for getting variation key for feature flag
-func (c *kameleoonClient) getFeatureVariationKey(visitorCode string, featureKey string) (*configuration.FeatureFlag, string, error) {
+func (c *kameleoonClient) getFeatureVariationKey(
+	visitorCode string, isUniqueIdentifier bool, featureKey string,
+) (*configuration.FeatureFlag, string, error) {
 	// validate that visitor code is acceptable else throw VisitorCodeNotValid exception
 	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
 		return nil, string(types.VariationOff), err
@@ -320,14 +396,14 @@ func (c *kameleoonClient) getFeatureVariationKey(visitorCode string, featureKey 
 	if err != nil {
 		return nil, string(types.VariationOff), err
 	}
-	variation, rule := c.calculateVariationRuleForFeature(visitorCode, &featureFlag)
+	variation, rule := c.calculateVariationRuleForFeature(visitorCode, featureFlag)
 	// get variation key from feature flag
 	variationKey := c.calculateVariationKey(variation, rule, &featureFlag.DefaultVariationKey)
 
 	visitor := c.assignFeatureVariation(visitorCode, rule, variation)
-	c.sendTrackingRequest(visitorCode, visitor, true)
+	c.sendTrackingRequest(visitorCode, visitor, true, isUniqueIdentifier)
 
-	return &featureFlag, variationKey, nil
+	return featureFlag, variationKey, nil
 }
 func (c *kameleoonClient) assignFeatureVariation(visitorCode string,
 	rule *configuration.Rule, variation *types.VariationByExposition) storage.Visitor {
@@ -355,11 +431,16 @@ func (c *kameleoonClient) calculateVariationKey(varByExp *types.VariationByExpos
 
 // getVariationRuleForFeature is a helper method for calculate variation key for feature flag
 func (c *kameleoonClient) calculateVariationRuleForFeature(
-	visitorCode string, featureFlag *configuration.FeatureFlag) (*types.VariationByExposition, *configuration.Rule) {
+	visitorCode string, featureFlag *configuration.FeatureFlag,
+) (*types.VariationByExposition, *configuration.Rule) {
+	codeForHash := visitorCode
+	if visitor := c.visitorManager.GetVisitor(visitorCode); (visitor != nil) && (visitor.MappingIdentifier() != nil) {
+		codeForHash = *visitor.MappingIdentifier()
+	}
 	// no rules -> return DefaultVariationKey
 	for _, rule := range featureFlag.Rules {
 		//check if visitor is targeted for rule, else next rule
-		if c.checkTargeting(visitorCode, featureFlag.Id, &rule) {
+		if c.targetingManager.CheckTargeting(visitorCode, rule.ExperimentId, &rule) {
 
 			// Disable searching in variation storage (uncommented if you need use variation storage)
 			// check for saved variation for rule if it's experimentation rule
@@ -368,7 +449,7 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 			// }
 
 			//uses for rule exposition
-			hashRule := utils.GetHashDoubleRule(visitorCode, rule.Id, rule.RespoolTime)
+			hashRule := utils.GetHashDoubleRule(codeForHash, rule.Id, rule.RespoolTime)
 			//check main expostion for rule with hashRule
 			if hashRule <= rule.Exposition {
 				if rule.IsTargetDeliveryType() {
@@ -379,7 +460,7 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 					return variation, &rule
 				}
 				//uses for variation's expositions
-				hashVariation := utils.GetHashDoubleRule(visitorCode, rule.ExperimentId, rule.RespoolTime)
+				hashVariation := utils.GetHashDoubleRule(codeForHash, rule.ExperimentId, rule.RespoolTime)
 				// get variation with new hashVariation
 				variation := rule.GetVariationByHash(hashVariation)
 				if variation != nil {
@@ -406,8 +487,14 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 // 	return nil, false
 // }
 
-func (c *kameleoonClient) GetFeatureVariable(visitorCode string, featureKey string, variableKey string) (interface{}, error) {
-	featureFlag, variationKey, err := c.getFeatureVariationKey(visitorCode, featureKey)
+func (c *kameleoonClient) GetFeatureVariable(
+	visitorCode string, featureKey string, variableKey string, isUniqueIdentifier ...bool,
+) (interface{}, error) {
+	var isUniqueIdentifierValue bool
+	if len(isUniqueIdentifier) > 0 {
+		isUniqueIdentifierValue = isUniqueIdentifier[0]
+	}
+	featureFlag, variationKey, err := c.getFeatureVariationKey(visitorCode, isUniqueIdentifierValue, featureKey)
 	if err != nil {
 		return nil, err
 	}
@@ -422,8 +509,10 @@ func (c *kameleoonClient) GetFeatureVariable(visitorCode string, featureKey stri
 	return parseFeatureVariableV2(variable), nil
 }
 
-func (c *kameleoonClient) IsFeatureActive(visitorCode string, featureKey string) (bool, error) {
-	variationKey, err := c.GetFeatureVariationKey(visitorCode, featureKey)
+func (c *kameleoonClient) IsFeatureActive(
+	visitorCode string, featureKey string, isUniqueIdentifier ...bool,
+) (bool, error) {
+	variationKey, err := c.GetFeatureVariationKey(visitorCode, featureKey, isUniqueIdentifier...)
 	switch err.(type) {
 	case *errs.FeatureEnvironmentDisabled:
 		return false, nil
@@ -465,92 +554,32 @@ func parseFeatureVariableV2(variable *types.Variable) interface{} {
 }
 
 func (c *kameleoonClient) GetRemoteData(key string, timeout ...time.Duration) ([]byte, error) {
-	timeoutValue := time.Duration(-1)
-	if len(timeout) > 0 {
-		timeoutValue = timeout[0]
-	}
-	c.log("Retrieve data from remote source (key '%s')", key)
-	out, err := c.networkManager.GetRemoteData(key, timeoutValue)
-	if err != nil {
-		c.log("Failed retrieve data from remote source: %v", err)
-		return nil, err
-	}
-	return out, nil
+	return c.remoteDataManager.GetData(key, timeout...)
 }
 
-func (c *kameleoonClient) GetRemoteVisitorData(visitorCode string, addData bool,
-	timeout ...time.Duration) ([]types.Data, error) {
-
-	timeoutValue := time.Duration(-1)
-	if len(timeout) > 0 {
-		timeoutValue = timeout[0]
-	}
-	out, err := c.networkManager.GetRemoteVisitorData(visitorCode, timeoutValue)
-	if err != nil {
-		return nil, err
-	}
-	var dataList []types.Data
-	if dataList, err = parseCustomDataList(out); err != nil {
-		return nil, err
-	}
-	if addData {
-		err = c.AddData(visitorCode, dataList...)
-	}
-	return dataList, err
+func (c *kameleoonClient) GetRemoteVisitorData(
+	visitorCode string,
+	addData bool,
+	timeout ...time.Duration,
+) ([]types.Data, error) {
+	filter := types.DefaultRemoteVisitorDataFilter()
+	return c.remoteDataManager.GetVisitorData(visitorCode, filter, addData, false, timeout...)
 }
 
-func parseCustomDataList(raw json.RawMessage) ([]types.Data, error) {
-	list := remoteVisitorDataList{}
-	if err := json.Unmarshal(raw, &list); err != nil {
-		return nil, err
+func (c *kameleoonClient) GetRemoteVisitorDataWithOptParams(
+	visitorCode string, addData bool, filter types.RemoteVisitorDataFilter, params ...RemoteVisitorDataOptParams,
+) ([]types.Data, error) {
+	var p RemoteVisitorDataOptParams
+	if len(params) > 0 {
+		p = params[0]
 	}
-	latestRecord := list.latestRecord()
-	if latestRecord == nil {
-		return []types.Data{}, nil
+	var timeout []time.Duration
+	if p.Timeout > 0 {
+		timeout = []time.Duration{p.Timeout}
 	}
-	customDataList := make([]types.Data, 0, len(latestRecord.CustomDataEvents))
-	for _, event := range latestRecord.CustomDataEvents {
-		if event.Data != nil {
-			customDataList = append(customDataList, event.Data.toCustomData())
-		}
-	}
-	return customDataList, nil
-}
-
-type remoteVisitorCustomData struct {
-	Id     int            `json:"index"`
-	Values map[string]int `json:"valuesCountMap"`
-}
-
-func (rvcd *remoteVisitorCustomData) toCustomData() *types.CustomData {
-	values := make([]string, 0, len(rvcd.Values))
-	for v := range rvcd.Values {
-		values = append(values, v)
-	}
-	return types.NewCustomData(rvcd.Id, values...)
-}
-
-type remoteVisitorEvent struct {
-	Data *remoteVisitorCustomData `json:"data"`
-}
-
-type remoteVisitorDataVisit struct {
-	CustomDataEvents []remoteVisitorEvent `json:"customDataEvents"`
-}
-
-type remoteVisitorDataList struct {
-	CurrentVisit   *remoteVisitorDataVisit  `json:"currentVisit"`
-	PreviousVisits []remoteVisitorDataVisit `json:"previousVisits"`
-}
-
-func (list remoteVisitorDataList) latestRecord() *remoteVisitorDataVisit {
-	if list.CurrentVisit != nil {
-		return list.CurrentVisit
-	}
-	if (list.PreviousVisits != nil) && (len(list.PreviousVisits) > 0) {
-		return &list.PreviousVisits[0]
-	}
-	return nil
+	return c.remoteDataManager.GetVisitorData(
+		visitorCode, filter, addData, p.IsUniqueIdentifier, timeout...,
+	)
 }
 
 func (c *kameleoonClient) log(format string, args ...interface{}) {
@@ -569,12 +598,7 @@ func (c *kameleoonClient) OnUpdateConfiguration(handler func()) {
 
 func (c *kameleoonClient) fetchConfig(ts int64) error {
 	if clientConfig, err := c.requestClientConfig(ts); err == nil {
-		c.m.Lock()
-		c.dataFile = configuration.NewDataFile(clientConfig, c.cfg.Environment)
-		c.configurationUpdateService.UpdateSettings(clientConfig.Settings)
-		c.networkManager.GetUrlProvider().ApplyDataApiDomain(c.dataFile.Settings().DataApiDomain())
-		c.updateCookieManagerConsentRequired()
-		c.m.Unlock()
+		c.updateDataFile(configuration.NewDataFile(clientConfig, c.cfg.Environment))
 		if ts != -1 {
 			c.updateConfigurationHandler()
 		}
@@ -583,6 +607,17 @@ func (c *kameleoonClient) fetchConfig(ts int64) error {
 		c.log("Failed to fetch: %v", err)
 		return err
 	}
+}
+
+func (c *kameleoonClient) updateDataFile(df *configuration.DataFile) {
+	c.m.Lock()
+	defer c.m.Unlock()
+	c.dataFile = df
+	c.configurationUpdateService.UpdateSettings(df.Settings())
+	c.networkManager.GetUrlProvider().ApplyDataApiDomain(df.Settings().DataApiDomain())
+	c.updateCookieManagerConsentRequired()
+	c.visitorManager.SetCustomDataInfo(df.CustomDataInfo())
+	c.targetingManager.SetDataFile(df)
 }
 
 func (c *kameleoonClient) updateCookieManagerConsentRequired() {
@@ -631,59 +666,6 @@ func (c *kameleoonClient) getValidSavedVariation(visitorCode string, experiment 
 }
 //*/
 
-func (c *kameleoonClient) checkTargeting(visitorCode string, campaignId int, expOrFForRule configuration.TargetingObjectInterface) bool {
-	segment := expOrFForRule.GetTargetingSegment()
-	visitor := c.visitorManager.GetVisitor(visitorCode)
-	return segment == nil || segment.CheckTargeting(func(targetingType types.TargetingType) interface{} {
-		return c.getConditionData(targetingType, visitor, visitorCode, campaignId)
-	})
-}
-
-func (c *kameleoonClient) getConditionData(targetingType types.TargetingType, visitor storage.Visitor,
-	visitorCode string, campaignId int) interface{} {
-	var conditionData interface{}
-	switch targetingType {
-	case types.TargetingCustomDatum:
-		if visitor != nil {
-			conditionData = visitor.CustomData()
-		}
-	case types.TargetingBrowser:
-		if visitor != nil {
-			conditionData = visitor.Browser()
-		}
-	case types.TargetingDeviceType:
-		if visitor != nil {
-			conditionData = visitor.Device()
-		}
-	case types.TargetingPageTitle:
-		fallthrough
-	case types.TargetingPageUrl:
-		if visitor != nil {
-			conditionData = visitor.PageViewVisits()
-		}
-	case types.TargetingConversions:
-		if visitor != nil {
-			conditionData = visitor.Conversions()
-		}
-	case types.TargetingVisitorCode:
-		conditionData = visitorCode
-	case types.TargetingSDKLanguage:
-		conditionData = &types.TargetedDataSdk{Language: utils.SdkName, Version: utils.SdkVersion}
-	case types.TargetingTargetExperiment:
-		if visitor != nil {
-			conditionData = visitor.Variations()
-		}
-	case types.TargetingExclusiveExperiment:
-		if visitor != nil {
-			conditionData = conditions.TargetedDataExclusiveExperiment{
-				ExperimentId:     campaignId,
-				VariationStorage: visitor.Variations(),
-			}
-		}
-	}
-	return conditionData
-}
-
 func (c *kameleoonClient) GetFeatureList() []string {
 	c.m.Lock()
 	defer c.m.Unlock()
@@ -702,7 +684,7 @@ func (c *kameleoonClient) GetActiveFeatureListForVisitor(visitorCode string) ([]
 	defer c.m.Unlock()
 	arrayIds := make([]string, 0, len(c.dataFile.FeatureFlags()))
 	for _, ff := range c.dataFile.FeatureFlags() {
-		variation, rule := c.calculateVariationRuleForFeature(visitorCode, &ff)
+		variation, rule := c.calculateVariationRuleForFeature(visitorCode, ff)
 		if ff.GetVariationKey(variation, rule) != string(types.VariationOff) {
 			arrayIds = append(arrayIds, ff.FeatureKey)
 		}
@@ -726,4 +708,16 @@ func (c *kameleoonClient) GetEngineTrackingCode(visitorCode string) string {
 func (c *kameleoonClient) GetVisitorWarehouseAudience(params VisitorWarehouseAudienceParams) (*types.CustomData, error) {
 	return c.warehouseManager.GetVisitorWarehouseAudience(
 		params.VisitorCode, params.WarehouseKey, params.CustomDataIndex, params.Timeout)
+}
+
+func (c *kameleoonClient) GetVisitorWarehouseAudienceWithOptParams(
+	visitorCode string, customDataIndex int, params ...VisitorWarehouseAudienceOptParams,
+) (*types.CustomData, error) {
+	var p VisitorWarehouseAudienceOptParams
+	if len(params) > 0 {
+		p = params[0]
+	}
+	return c.warehouseManager.GetVisitorWarehouseAudience(
+		visitorCode, p.WarehouseKey, customDataIndex, p.Timeout,
+	)
 }

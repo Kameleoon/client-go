@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Kameleoon/client-go/v3/types"
 	"github.com/Kameleoon/client-go/v3/utils"
 )
 
@@ -22,8 +23,8 @@ const (
 )
 
 type UrlProvider interface {
-	MakeTrackingUrl(visitorCode string) string
-	MakeVisitorDataGetUrl(visitorCode string) string
+	MakeTrackingUrl(visitorCode string, isUniqueIdentifier bool) string
+	MakeVisitorDataGetUrl(visitorCode string, filter types.RemoteVisitorDataFilter, isUniqueIdentifier bool) string
 	MakeApiDataGetRequestUrl(key string) string
 	MakeConfigurationUrl(environment string, ts int64) string
 	MakeRealTimeUrl() string
@@ -69,24 +70,47 @@ func (up *UrlProviderImpl) SdkVersion() string {
 	return up.sdkVersion
 }
 
-func (up *UrlProviderImpl) MakeTrackingUrl(visitorCode string) string {
+func getUserIdQP(isUniqueIdentifier bool) string {
+	if isUniqueIdentifier {
+		return utils.QPMappingValue
+	}
+	return utils.QPVisitorCode
+}
+
+func (up *UrlProviderImpl) MakeTrackingUrl(visitorCode string, isUniqueIdentifier bool) string {
 	qb := utils.NewQueryBuilder()
 	qb.Append(utils.QPSdkName, up.sdkName)
 	qb.Append(utils.QPSdkVersion, up.sdkVersion)
 	qb.Append(utils.QPSiteCode, up.siteCode)
-	qb.Append(utils.QPVisitorCode, visitorCode)
+	qb.Append(getUserIdQP(isUniqueIdentifier), visitorCode)
 	return fmt.Sprintf("https://%s%s?%s", up.dataApiDomain, trackingPath, qb.String())
 }
 
-func (up *UrlProviderImpl) MakeVisitorDataGetUrl(visitorCode string) string {
+func (up *UrlProviderImpl) MakeVisitorDataGetUrl(
+	visitorCode string,
+	filter types.RemoteVisitorDataFilter,
+	isUniqueIdentifier bool,
+) string {
 	qb := utils.NewQueryBuilder()
 	qb.Append(utils.QPSiteCode, up.siteCode)
-	qb.Append(utils.QPVisitorCode, visitorCode)
-	qb.Append(utils.QPCurrentVisit, "true")
-	qb.Append(utils.QPMaxNumberPreviousVisits, "1")
-	qb.Append(utils.QPCustomData, "true")
+	qb.Append(getUserIdQP(isUniqueIdentifier), visitorCode)
+	qb.Append(utils.QPMaxNumberPreviousVisits, fmt.Sprintf("%d", filter.PreviousVisitAmount))
 	qb.Append(utils.QPVersion, "0")
+	addFlagParamIfRequired(qb, utils.QPKcs, filter.Kcs)
+	addFlagParamIfRequired(qb, utils.QPCurrentVisit, filter.CurrentVisit)
+	addFlagParamIfRequired(qb, utils.QPCustomData, filter.CustomData)
+	addFlagParamIfRequired(qb, utils.QPConversion, filter.Conversion)
+	addFlagParamIfRequired(qb, utils.QPGeolocation, filter.Geolocation)
+	addFlagParamIfRequired(qb, utils.QPExperiment, filter.Experiments)
+	addFlagParamIfRequired(qb, utils.QPPage, filter.PageViews)
+	addFlagParamIfRequired(qb, utils.QPStaticData, filter.Device || filter.Browser || filter.OperatingSystem)
 	return fmt.Sprintf("https://%s%s?%s", up.dataApiDomain, visitorDataPath, qb.String())
+}
+
+func addFlagParamIfRequired(qb *utils.QueryBuilder, paramName string, state bool) {
+	if state {
+		qb.Append(paramName, "true")
+	}
 }
 
 func (up *UrlProviderImpl) MakeApiDataGetRequestUrl(key string) string {

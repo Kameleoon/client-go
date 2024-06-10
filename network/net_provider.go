@@ -13,8 +13,8 @@ import (
 type HttpMethod string
 
 const (
-	HttpGet  = "GET"
-	HttpPost = "POST"
+	HttpGet  HttpMethod = "GET"
+	HttpPost HttpMethod = "POST"
 )
 
 type ContentType string

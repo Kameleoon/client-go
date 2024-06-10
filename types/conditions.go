@@ -1,6 +1,7 @@
 package types
 
 import (
+	"math"
 	"strings"
 
 	"github.com/segmentio/encoding/json"
@@ -39,7 +40,7 @@ type TargetingConditionBase struct {
 	Include bool          `json:"isInclude,omitempty"`
 }
 
-type TargetingCondition struct {
+type targetingCondition struct {
 	TargetingConditionBase
 	Value              interface{}          `json:"value,omitempty"`
 	Operator           OperatorType         `json:"valueMatchType,omitempty"`
@@ -57,6 +58,38 @@ type TargetingCondition struct {
 	Title              string               `json:"title,omitempty"`
 	Url                string               `json:"url,omitempty"`
 	GoalId             int                  `json:"goalId,omitempty"`
+	Name               string               `json:"name,omitempty"`
+	NameMatchType      OperatorType         `json:"nameMatchType,omitempty"`
+	Country            string               `json:"country,omitempty"`
+	Region             string               `json:"region,omitempty"`
+	City               string               `json:"city,omitempty"`
+	OS                 string               `json:"os,omitempty"`
+	SegmentId          int                  `json:"segmentId,omitempty"`
+	FeatureFlagId      int                  `json:"featureFlagId,omitempty"`
+	VariationKey       string               `json:"variationKey,omitempty"`
+	RuleId             int                  `json:"ruleId,omitempty"`
+	PageCount          int                  `json:"pageCount,omitempty"`
+	CountInMillis      int64                `json:"countInMillis,omitempty"`
+	VisitCount         int                  `json:"visitCount,omitempty"`
+	VisitorType        string               `json:"visitorType,omitempty"`
+	KeyMomentId        int                  `json:"keyMomentId,omitempty"`
+	LowerBound         float64              `json:"lowerBound,omitempty"`
+	UpperBound         float64              `json:"upperBound,omitempty"`
+}
+
+type TargetingCondition targetingCondition
+
+const (
+	UndefinedCountInMillisValue = -1
+	UndefinedVisitCountValue    = -1
+)
+
+func (c *TargetingCondition) UnmarshalJSON(data []byte) error {
+	c.Include = true
+	c.PageCount = math.MaxInt
+	c.CountInMillis = UndefinedCountInMillisValue
+	c.VisitCount = UndefinedVisitCountValue
+	return json.Unmarshal(data, (*targetingCondition)(c))
 }
 
 func (c *TargetingConditionBase) String() string {

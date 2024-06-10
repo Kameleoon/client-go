@@ -10,6 +10,7 @@ require (
 	github.com/stretchr/testify v1.7.5
 	github.com/subchord/go-sse v1.0.7
 	github.com/valyala/fasthttp v1.34.0
+	golang.org/x/exp v0.0.0-20240529005216-23cca8864a10
 )
 
 require (

@@ -13,7 +13,7 @@ type FeatureFlag struct {
 	Rules               []Rule                       `json:"rules"`
 }
 
-func (ff FeatureFlag) GetVariationByKey(key string) (*types.VariationFeatureFlag, bool) {
+func (ff *FeatureFlag) GetVariationByKey(key string) (*types.VariationFeatureFlag, bool) {
 	for _, v := range ff.Variations {
 		if v.Key == key {
 			return &v, true
@@ -22,7 +22,7 @@ func (ff FeatureFlag) GetVariationByKey(key string) (*types.VariationFeatureFlag
 	return nil, false
 }
 
-func (ff FeatureFlag) GetVariationKey(varByExp *types.VariationByExposition, rule *Rule) string {
+func (ff *FeatureFlag) GetVariationKey(varByExp *types.VariationByExposition, rule *Rule) string {
 	if varByExp != nil {
 		return varByExp.VariationKey
 	} else if rule != nil && rule.IsExperimentType() {
@@ -30,4 +30,32 @@ func (ff FeatureFlag) GetVariationKey(varByExp *types.VariationByExposition, rul
 	} else {
 		return ff.DefaultVariationKey
 	}
+}
+
+func (ff *FeatureFlag) GetId() int {
+	return ff.Id
+}
+
+func (ff *FeatureFlag) GetFeatureKey() string {
+	return ff.FeatureKey
+}
+
+func (ff *FeatureFlag) GetVariations() []types.VariationFeatureFlag {
+	return ff.Variations
+}
+
+func (ff *FeatureFlag) GetDefaultVariationKey() string {
+	return ff.DefaultVariationKey
+}
+
+func (ff *FeatureFlag) GetEnvironmentEnabled() bool {
+	return ff.EnvironmentEnabled
+}
+
+func (ff *FeatureFlag) GetRules() []types.Rule {
+	rules := make([]types.Rule, len(ff.Rules))
+	for i := len(ff.Rules) - 1; i >= 0; i-- {
+		rules[i] = &ff.Rules[i]
+	}
+	return rules
 }

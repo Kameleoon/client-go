@@ -8,8 +8,6 @@ import (
 	"github.com/Kameleoon/client-go/v3/types"
 )
 
-type GetTargetingData func(types.TargetingType) interface{}
-
 type Tree struct {
 	LeftTree   *Tree
 	RightTree  *Tree
@@ -51,7 +49,7 @@ func (t *Tree) String() string {
 	return t.StringPadding(0)
 }
 
-func (t *Tree) CheckTargeting(data GetTargetingData) bool {
+func (t *Tree) CheckTargeting(data types.TargetingDataGetter) bool {
 	if t.Condition != nil {
 		return t.checkCondition(data)
 	}
@@ -76,7 +74,7 @@ func (t *Tree) CheckTargeting(data GetTargetingData) bool {
 	return leftTargeted && rightTargeted
 }
 
-func (t *Tree) checkCondition(data GetTargetingData) bool {
+func (t *Tree) checkCondition(data types.TargetingDataGetter) bool {
 	td := data(t.Condition.GetType())
 	targeted := t.Condition.CheckTargeting(td)
 	if !t.Condition.GetInclude() {
@@ -185,12 +183,36 @@ func getCondition(c types.TargetingCondition) types.Condition {
 		return conditions.NewPageTitleCondition(c)
 	case types.TargetingPageUrl:
 		return conditions.NewPageUrlCondition(c)
+	case types.TargetingPageViews:
+		return conditions.NewPageViewNumberCondition(c)
+	case types.TargetingPreviousPage:
+		return conditions.NewPreviousPageCondition(c)
 	case types.TargetingConversions:
 		return conditions.NewConversionCondition(c)
-	case types.TargetingTargetExperiment:
-		return conditions.NewTargetExperiment(c)
-	case types.TargetingExclusiveExperiment:
-		return conditions.NewExclusiveExperiment(c)
+	case types.TargetingTargetFeatureFlag:
+		return conditions.NewTargetFeatureFlagCondition(c)
+	case types.TargetingExclusiveFeatureFlag:
+		return conditions.NewExclusiveFeatureFlagCondition(c)
+	case types.TargetingCookie:
+		return conditions.NewCookieCondition(c)
+	case types.TargetingGeolocation:
+		return conditions.NewGeolocationCondition(c)
+	case types.TargetingOperatingSystem:
+		return conditions.NewOperatingSystemCondition(c)
+	case types.TargetingSegment:
+		return conditions.NewSegmentCondition(c)
+	case types.TargetingVisits:
+		return conditions.NewVisitNumberTotalCondition(c)
+	case types.TargetingSameDayVisits:
+		return conditions.NewVisitNumberTodayCondition(c)
+	case types.TargetingNewVisitors:
+		return conditions.NewVisitorNewReturnCondition(c)
+	case types.TargetingFirstVisit:
+		fallthrough
+	case types.TargetingLastVisit:
+		return conditions.NewTimeElapsedSinceVisitCondition(c)
+	case types.TargetingHeatSlice:
+		return conditions.NewKcsHeatRangeCondition(c)
 	}
 	return nil
 }
