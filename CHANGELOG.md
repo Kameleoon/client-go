@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.3.0 - 2024-06-21
+### Features
+* Added [`GetActiveFeatures`](https://developers.kameleoon.com/go-sdk.html#getactivefeatures) method. It retrieves information about the active feature flags that are available for a specific visitor code. This method replaces the deprecated [`GetActiveFeatureListForVisitor`](https://developers.kameleoon.com/go-sdk.html#getactivefeaturelistforvisitor) method.
+### Bug fixes
+* The SDK no longer logs failed tracking requests to the [Data API](https://developers.kameleoon.com/apis/data-api-rest/all-endpoints/post-visit-events/) when the user agent is identified as a bot (i.e., when the status code is 403).
+
 ## 3.2.0 - 2024-06-10
 ### Features
 * New targeting conditions are now available (some of them may require [`GetRemoteVisitorData`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getremotevisitordata) pre-loaded data)

@@ -198,7 +198,15 @@ type KameleoonClient interface {
 	// GetActiveFeatureListForVisitor returns a list of active feature flag keys for a visitor
 	//
 	// returns VisitorCodeNotValid error when visitor code is not valid
+	//
+	// Deprecated: Please use `GetActiveFeatures`
 	GetActiveFeatureListForVisitor(visitorCode string) ([]string, error)
+
+	// GetActiveFeatures returns a map that contains the assigned variations of the active features
+	// using the keys of the corresponding active features.
+	//
+	// returns VisitorCodeNotValid error when visitor code is not valid
+	GetActiveFeatures(visitorCode string) (map[string]types.Variation, error)
 
 	GetEngineTrackingCode(visitorCode string) string
 }
@@ -667,10 +675,9 @@ func (c *kameleoonClient) getValidSavedVariation(visitorCode string, experiment 
 //*/
 
 func (c *kameleoonClient) GetFeatureList() []string {
-	c.m.Lock()
-	defer c.m.Unlock()
-	arrayKeys := make([]string, 0, len(c.dataFile.FeatureFlags()))
-	for _, ff := range c.dataFile.FeatureFlags() {
+	featureFlags := c.dataFile.FeatureFlags()
+	arrayKeys := make([]string, 0, len(featureFlags))
+	for _, ff := range featureFlags {
 		arrayKeys = append(arrayKeys, ff.FeatureKey)
 	}
 	return arrayKeys
@@ -680,16 +687,64 @@ func (c *kameleoonClient) GetActiveFeatureListForVisitor(visitorCode string) ([]
 	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
 		return []string{}, err
 	}
-	c.m.Lock()
-	defer c.m.Unlock()
-	arrayIds := make([]string, 0, len(c.dataFile.FeatureFlags()))
-	for _, ff := range c.dataFile.FeatureFlags() {
+	featureFlags := c.dataFile.FeatureFlags()
+	arrayIds := make([]string, 0, len(featureFlags))
+	for _, ff := range featureFlags {
 		variation, rule := c.calculateVariationRuleForFeature(visitorCode, ff)
 		if ff.GetVariationKey(variation, rule) != string(types.VariationOff) {
 			arrayIds = append(arrayIds, ff.FeatureKey)
 		}
 	}
 	return arrayIds, nil
+}
+
+func (c *kameleoonClient) GetActiveFeatures(visitorCode string) (map[string]types.Variation, error) {
+	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
+		return nil, err
+	}
+	mapActiveFeatures := make(map[string]types.Variation)
+	for _, ff := range c.dataFile.FeatureFlags() {
+		if !ff.EnvironmentEnabled {
+			continue
+		}
+
+		varByExp, rule := c.calculateVariationRuleForFeature(visitorCode, ff)
+		variationKey := ff.GetVariationKey(varByExp, rule)
+
+		if variationKey == string(types.VariationOff) {
+			continue
+		}
+
+		variation, exist := ff.GetVariationByKey(variationKey)
+		variables := make(map[string]types.Variable)
+		if exist {
+			for _, variable := range variation.Variables {
+				variables[variable.Key] = types.Variable{
+					Key:   variable.Key,
+					Type:  variable.Type,
+					Value: parseFeatureVariableV2(&variable),
+				}
+			}
+		}
+		var variationID *int
+		if varByExp != nil {
+			variationID = varByExp.VariationID
+		}
+
+		var experimentID *int
+		if rule != nil {
+			experimentID = &rule.ExperimentId
+		}
+
+		mapActiveFeatures[ff.FeatureKey] = types.Variation{
+			Key:          variationKey,
+			VariationID:  variationID,
+			ExperimentID: experimentID,
+			Variables:    variables,
+		}
+	}
+
+	return mapActiveFeatures, nil
 }
 
 func (c *kameleoonClient) GetEngineTrackingCode(visitorCode string) string {
