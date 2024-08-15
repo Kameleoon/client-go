@@ -68,7 +68,7 @@ func (c *TargetFeatureFlagCondition) getRules(dataFile types.DataFile) []types.R
 	}
 }
 
-func (c *TargetFeatureFlagCondition) String() string {
+func (c TargetFeatureFlagCondition) String() string {
 	return utils.JsonToString(c)
 }
 

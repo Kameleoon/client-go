@@ -31,7 +31,7 @@ func (c *ExclusiveFeatureFlagCondition) CheckTargeting(targetData interface{}) b
 	return false
 }
 
-func (c *ExclusiveFeatureFlagCondition) String() string {
+func (c ExclusiveFeatureFlagCondition) String() string {
 	return utils.JsonToString(c)
 }
 

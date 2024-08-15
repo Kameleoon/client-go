@@ -27,47 +27,58 @@ type AccessTokenSourceImpl struct {
 }
 
 func (ats *AccessTokenSourceImpl) GetToken(timeout time.Duration) string {
+	logging.Debug("CALL: AccessTokenSourceImpl.GetToken(timeout: %s)", timeout)
 	now := time.Now()
 	token := ats.cachedToken
+	var resultToken string
 	if token != nil && !token.isExpired(now) {
 		if !ats.fetching && token.isObsolete(now) {
 			ats.fetching = true // set `fetching` here as well to reduce the number of requests until goroutine runned
 			go ats.fetchToken(timeout)
 		}
-		return token.value
+		resultToken = token.value
+	} else {
+		resultToken = ats.fetchToken(timeout)
 	}
-	return ats.fetchToken(timeout)
-
+	logging.Debug("RETURN: AccessTokenSourceImpl.GetToken(timeout: %s) -> (token: %s)", timeout, resultToken)
+	return resultToken
 }
 
 func (ats *AccessTokenSourceImpl) DiscardToken(token string) {
+	logging.Debug("CALL: AccessTokenSourceImpl.DiscardToken(token: %s)", token)
 	cachedToken := ats.cachedToken
 	if cachedToken != nil && cachedToken.value == token {
 		ats.cachedToken = nil
 	}
+	logging.Debug("RETURN: AccessTokenSourceImpl.DiscardToken(token: %s)", token)
 }
 
 func (ats *AccessTokenSourceImpl) fetchToken(timeout time.Duration) string {
+	logging.Debug("CALL: AccessTokenSourceImpl.fetchToken(timeout: %s)", timeout)
 	ats.fetching = true
 	defer func() { ats.fetching = false }()
-	ats.logger.Printf("Fetching access token")
 	jsonResponse, err := ats.networkManager.FetchAccessJWToken(ats.clientId, ats.clientSecret, timeout)
+	var token string
 	if err != nil {
-		ats.logger.Printf("Failed to fetch access token: %v", err)
-		return ""
+		logging.Error("Failed to read access JWT: %s", err)
+		token = ""
+	} else {
+		accessTokenResponse := accessTokenResponse{}
+		err = json.Unmarshal(jsonResponse, &accessTokenResponse)
+		if err != nil {
+			logging.Error("Failed to parse access JWT: %s", err)
+			token = ""
+		} else {
+			ats.handleFetchedToken(accessTokenResponse)
+			token = accessTokenResponse.Token
+		}
 	}
-	accessTokenResponse := accessTokenResponse{}
-	err = json.Unmarshal(jsonResponse, &accessTokenResponse)
-	if err != nil {
-		ats.logger.Printf("Failed to unmarshal access token: %v", err)
-		return ""
-	}
-	ats.logger.Printf("Access token is fetched: %s", accessTokenResponse.Token)
-	ats.handleFetchedToken(accessTokenResponse)
-	return accessTokenResponse.Token
+	logging.Debug("RETURN: AccessTokenSourceImpl.fetchToken(timeout: %s) -> (token: %s)", timeout, token)
+	return token
 }
 
 func (ats *AccessTokenSourceImpl) handleFetchedToken(accessTokenResponse accessTokenResponse) {
+	logging.Debug("CALL: AccessTokenSourceImpl.handleFetchedToken(accessTokenResponse: %s)", accessTokenResponse)
 	expiresIn := accessTokenResponse.ExpiresIn
 	now := time.Now()
 	expTime := now.Add(time.Second * time.Duration(expiresIn-TokenExpirationGap))
@@ -77,14 +88,14 @@ func (ats *AccessTokenSourceImpl) handleFetchedToken(accessTokenResponse accessT
 	} else {
 		obsTime = expTime
 		if expiresIn <= TokenExpirationGap {
-			ats.logger.Printf(
-				"Kameleoon SDK: Access token life time (%ds) is not long enough to cache the token\n", expiresIn)
+			logging.Error("Access token life time (%ss) is not long enough to cache the token", expiresIn)
 		} else {
-			ats.logger.Printf("Kameleoon SDK: Access token life time (%ds) is not long enough to refresh cached token"+
-				"in background\n", expiresIn)
+			logging.Warning(
+				"Access token life time (%ss) is not long enough to refresh cached token in background", expiresIn)
 		}
 	}
 	ats.cachedToken = newExpiringToken(accessTokenResponse.Token, expTime, obsTime)
+	logging.Debug("RETURN: AccessTokenSourceImpl.handleFetchedToken(accessTokenResponse: %s)", accessTokenResponse)
 }
 
 type expiringToken struct {

@@ -26,4 +26,5 @@ const (
 	DataTypeOperatingSystem   DataType = "OPERATING_SYSTEM"
 	DataTypeVisitorVisits     DataType = "VISITOR_VISITS"
 	DataTypeKcsHeat           DataType = "KCS_HEAT"
+	DataTypeUniqueIdentifier  DataType = "UNIQUE_IDENTIFIER"
 )

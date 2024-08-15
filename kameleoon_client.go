@@ -4,13 +4,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Kameleoon/client-go/v3/logging"
+
 	"github.com/Kameleoon/client-go/v3/configuration"
 	"github.com/Kameleoon/client-go/v3/errs"
+	"github.com/Kameleoon/client-go/v3/managers/data"
 	"github.com/Kameleoon/client-go/v3/managers/hybrid"
 	"github.com/Kameleoon/client-go/v3/managers/remotedata"
+	"github.com/Kameleoon/client-go/v3/managers/tracking"
 	"github.com/Kameleoon/client-go/v3/managers/warehouse"
 	"github.com/Kameleoon/client-go/v3/network"
 	"github.com/Kameleoon/client-go/v3/network/cookie"
+	"github.com/Kameleoon/client-go/v3/realtime"
 	"github.com/Kameleoon/client-go/v3/storage"
 	"github.com/Kameleoon/client-go/v3/targeting"
 	"github.com/Kameleoon/client-go/v3/types"
@@ -33,7 +38,7 @@ type VisitorWarehouseAudienceOptParams struct {
 }
 
 type RemoteVisitorDataOptParams struct {
-	IsUniqueIdentifier bool
+	IsUniqueIdentifier bool // Deprecated: Please use `UniqueIdentifier` data instead
 	Timeout            time.Duration
 }
 
@@ -80,7 +85,9 @@ type KameleoonClient interface {
 	// With this method you can manually send it.
 	FlushVisitor(visitorCode string, isUniqueIdentifier ...bool) error
 
-	FlushAll()
+	FlushVisitorInstantly(visitorCode string) error
+
+	FlushAll(instant ...bool)
 
 	// GetFeatureVariationKey returns a variation key for visitor code
 	//
@@ -186,7 +193,12 @@ type KameleoonClient interface {
 
 	GetRemoteVisitorData(visitorCode string, addData bool, timeout ...time.Duration) ([]types.Data, error)
 
+	// Deprecated: Please use `GetRemoteVisitorDataWithFilter`
 	GetRemoteVisitorDataWithOptParams(
+		visitorCode string, addData bool, filter types.RemoteVisitorDataFilter, params ...RemoteVisitorDataOptParams,
+	) ([]types.Data, error)
+
+	GetRemoteVisitorDataWithFilter(
 		visitorCode string, addData bool, filter types.RemoteVisitorDataFilter, params ...RemoteVisitorDataOptParams,
 	) ([]types.Data, error)
 
@@ -212,81 +224,106 @@ type KameleoonClient interface {
 }
 
 type kameleoonClient struct {
-	cfg               *KameleoonClientConfig
-	visitorManager    storage.VisitorManager
-	networkManager    network.NetworkManager
-	cookieManager     cookie.CookieManager
-	hybridManager     hybrid.HybridManager
-	warehouseManager  warehouse.WarehouseManager
-	targetingManager  targeting.TargetingManager
-	remoteDataManager remotedata.RemoteDataManager
+	cfg                  *KameleoonClientConfig
+	visitorManager       storage.VisitorManager
+	networkManager       network.NetworkManager
+	cookieManager        cookie.CookieManager
+	hybridManager        hybrid.HybridManager
+	warehouseManager     warehouse.WarehouseManager
+	targetingManager     targeting.TargetingManager
+	remoteDataManager    remotedata.RemoteDataManager
+	trackingManager      tracking.TrackingManager
+	configurationManager configuration.ConfigurationManager
 
-	m                          sync.Mutex
-	readiness                  *kameleoonClientReadiness
-	dataFile                   *configuration.DataFile
-	configurationUpdateService configuration.ConfigurationUpdateService
-	updateConfigurationHandler func()
-	closed                     bool
+	m           sync.Mutex
+	readiness   *kameleoonClientReadiness
+	dataManager data.DataManager
+	closed      bool
 }
 
 func newClient(siteCode string, cfg *KameleoonClientConfig) (*kameleoonClient, error) {
+	logging.Info("CALL: newClient(siteCode: %s, config: %s)", siteCode, cfg)
 	if len(siteCode) == 0 {
-		return nil, errs.NewSiteCodeIsEmpty("Provided siteCode is empty")
-	}
-	if err := cfg.defaults(); err != nil {
+		err := errs.NewSiteCodeIsEmpty("Provided siteCode is empty")
+		logging.Info("RETURN: newClient(siteCode: %s, config: %s) -> (client, error: %s)",
+			siteCode, cfg, err)
 		return nil, err
 	}
+	if err := cfg.defaults(); err != nil {
+		logging.Info("RETURN: newClient(siteCode: %s, config: %s) -> (client, error: %s)",
+			siteCode, cfg, err)
+		return nil, err
+	}
+
+	if cfg.Logger != nil {
+		logging.SetOldLogger(cfg.Logger)
+	}
+
+	if cfg.VerboseMode && logging.GetLogLevel() == logging.WARNING {
+		logging.SetLogLevel(logging.INFO)
+	}
+
+	df := configuration.NewDataFile(configuration.Configuration{}, cfg.Environment)
+	dm := data.NewDataManagerImpl(df)
 	np := network.NewNetProviderImpl(cfg.Network.ReadTimeout, cfg.Network.WriteTimeout,
 		cfg.Network.MaxConnsPerHost, cfg.Network.ProxyURL)
 	up := network.NewUrlProviderImpl(siteCode, network.DefaultDataApiDomain, utils.SdkName, utils.SdkVersion)
 	atsf := &network.AccessTokenSourceFactoryImpl{ClientId: cfg.ClientID, ClientSecret: cfg.ClientSecret}
-	nm := network.NewNetworkManagerImpl(cfg.Environment, cfg.DefaultTimeout, np, up, atsf, cfg.Logger)
-	vm := newVisitorManager(cfg)
-	hm, err := hybrid.NewHybridManagerImpl(5 * time.Second)
-	if err != nil {
-		cfg.Logger.Printf("HybridManager isn't initialized properly, " +
-			"GetEngineTrackingCode method isn't available for call")
-	}
-	tm := targeting.NewTargetingManager(vm)
-	rdm := remotedata.NewRemoteDataManager(nm, vm, cfg.Logger)
-	client := newClientInternal(cfg, nm, vm, hm, tm, rdm)
+	nm := network.NewNetworkManagerImpl(cfg.Environment, cfg.DefaultTimeout, np, up, atsf)
+	vm := newVisitorManager(dm, cfg)
+	hm, _ := hybrid.NewHybridManagerImpl(5 * time.Second)
+	tarM := targeting.NewTargetingManager(dm, vm)
+	rdm := remotedata.NewRemoteDataManager(dm, nm, vm)
+	trM := tracking.NewTrackingManagerImpl(dm, nm, vm, cfg.TrackingInterval)
+	cm := configuration.NewConfigurationManager(dm, nm, &realtime.NetSseClient{}, cfg.RefreshInterval, cfg.Environment)
+	client := newClientInternal(cfg, dm, nm, vm, hm, tarM, rdm, trM, cm)
+	logging.Info("RETURN: newClient(siteCode: %s, config: %s) -> (client, error: <nil>)",
+		siteCode, cfg)
 	return client, nil
 }
 
 func newClientInternal(
 	cfg *KameleoonClientConfig,
+	dataManager data.DataManager,
 	networkManager network.NetworkManager,
 	visitorManager storage.VisitorManager,
 	hybridManager hybrid.HybridManager,
 	targetingManager targeting.TargetingManager,
 	remoteDataManager remotedata.RemoteDataManager,
+	trackingManager tracking.TrackingManager,
+	configurationManager configuration.ConfigurationManager,
 ) *kameleoonClient {
 	client := &kameleoonClient{
-		cfg:               cfg,
-		readiness:         newKameleoonClientReadiness(),
-		dataFile:          configuration.NewDataFile(configuration.Configuration{}, cfg.Environment),
-		visitorManager:    visitorManager,
-		hybridManager:     hybridManager,
-		networkManager:    networkManager,
-		cookieManager:     cookie.NewCookieManagerImpl(cfg.TopLevelDomain),
-		warehouseManager:  warehouse.NewWarehouseManagerImpl(networkManager, visitorManager, cfg.Logger),
-		targetingManager:  targetingManager,
-		remoteDataManager: remoteDataManager,
+		cfg:                  cfg,
+		readiness:            newKameleoonClientReadiness(),
+		dataManager:          dataManager,
+		visitorManager:       visitorManager,
+		hybridManager:        hybridManager,
+		networkManager:       networkManager,
+		cookieManager:        cookie.NewCookieManagerImpl(dataManager, cfg.TopLevelDomain),
+		warehouseManager:     warehouse.NewWarehouseManagerImpl(networkManager, visitorManager),
+		targetingManager:     targetingManager,
+		remoteDataManager:    remoteDataManager,
+		trackingManager:      trackingManager,
+		configurationManager: configurationManager,
 	}
-	client.targetingManager.SetDataFile(client.dataFile)
 	go client.updateConfigInitially()
 	return client
 }
 
-func newVisitorManager(cfg *KameleoonClientConfig) storage.VisitorManager {
-	return storage.NewVisitorManagerImpl(cfg.SessionDuration, nil)
+func newVisitorManager(dm data.DataManager, cfg *KameleoonClientConfig) storage.VisitorManager {
+	return storage.NewVisitorManagerImpl(dm, cfg.SessionDuration)
 }
 
 func (c *kameleoonClient) WaitInit() error {
-	return c.readiness.Wait()
+	logging.Info("CALL: kameleoonClient.WaitInit()")
+	err := c.readiness.Wait()
+	logging.Info("RETURN: kameleoonClient.WaitInit() -> (error: %s)", err)
+	return err
 }
 
 func (c *kameleoonClient) close() {
+	logging.Debug("CALL: kameleoonClient.close()")
 	if !c.closed {
 		c.m.Lock()
 		if c.closed {
@@ -295,57 +332,84 @@ func (c *kameleoonClient) close() {
 			c.closed = true
 			c.m.Unlock()
 			c.visitorManager.Close()
+			c.trackingManager.Close()
 		}
 	}
+	logging.Debug("RETURN: kameleoonClient.close()")
 }
 
 func (c *kameleoonClient) GetVisitorCode(request *fasthttp.Request, response *fasthttp.Response,
 	defaultVisitorCode ...string) (string, error) {
-	return c.cookieManager.GetOrAdd(request, response, defaultVisitorCode...)
+	logging.Info("CALL: kameleoonClient.GetVisitorCode(request, response, defaultVisitorCode: %s)",
+		defaultVisitorCode)
+	visitorCode, err := c.cookieManager.GetOrAdd(request, response, defaultVisitorCode...)
+	logging.Info(
+		"RETURN: kameleoonClient.GetVisitorCode(request, response, defaultVisitorCode: %s) -> "+
+			"(visitorCode: %s, error: %s)", defaultVisitorCode, visitorCode, err)
+	return visitorCode, err
 }
 
 func (c *kameleoonClient) SetLegalConsent(visitorCode string, consent bool, response ...*fasthttp.Response) error {
-	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
-		return err
+	logging.Info("CALL: kameleoonClient.SetLegalConsent(visitorCode: %s, consent: %s, response)",
+		visitorCode, consent)
+	err := utils.ValidateVisitorCode(visitorCode)
+	if err == nil {
+		v := c.visitorManager.GetOrCreateVisitor(visitorCode)
+		v.SetLegalConsent(consent)
+		if len(response) > 0 {
+			c.cookieManager.Update(visitorCode, consent, response[0])
+		}
 	}
-	v := c.visitorManager.GetOrCreateVisitor(visitorCode)
-	v.SetLegalConsent(consent)
-	if len(response) > 0 {
-		c.cookieManager.Update(visitorCode, consent, response[0])
-	}
-	return nil
+	logging.Info("RETURN: kameleoonClient.SetLegalConsent(visitorCode: %s, consent: %s, response) -> (error: %s)",
+		visitorCode, consent, err)
+	return err
 }
 
 func (c *kameleoonClient) AddData(visitorCode string, allData ...types.Data) error {
 	//var stats runtime.MemStats
 	//runtime.ReadMemStats(&stats))
-	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
-		return err
+	logging.Info("CALL: kameleoonClient.AddData(visitorCode: %s, allData: %s)", visitorCode, allData)
+	err := utils.ValidateVisitorCode(visitorCode)
+	if err == nil {
+		c.visitorManager.AddData(visitorCode, allData...)
 	}
-	c.visitorManager.AddData(visitorCode, allData...)
-	return nil
+	logging.Info("RETURN: kameleoonClient.AddData(visitorCode: %s, allData: %s) -> (error: %s)",
+		visitorCode, allData, err)
+	return err
 }
 
 func (c *kameleoonClient) TrackConversion(visitorCode string, goalID int, isUniqueIdentifier ...bool) error {
-	var isUniqueIdentifierValue bool
+	logging.Info(
+		"CALL: kameleoonClient.TrackConversion(visitorCode: %s, goalID: %s, isUniqueIdentifier: %s)",
+		visitorCode, goalID, isUniqueIdentifier)
 	if len(isUniqueIdentifier) > 0 {
-		isUniqueIdentifierValue = isUniqueIdentifier[0]
+		c.setUniqueIdentifier(visitorCode, isUniqueIdentifier[0])
 	}
-	return c.trackConversion(visitorCode, isUniqueIdentifierValue, goalID)
+	err := c.trackConversion(visitorCode, goalID)
+	logging.Info(
+		"RETURN: kameleoonClient.TrackConversion(visitorCode: %s, goalID: %s, isUniqueIdentifier: %s) -> (error: %s)",
+		visitorCode, goalID, isUniqueIdentifier, err)
+	return err
 }
 
 func (c *kameleoonClient) TrackConversionRevenue(
 	visitorCode string, goalID int, revenue float64, isUniqueIdentifier ...bool,
 ) error {
-	var isUniqueIdentifierValue bool
+	logging.Info(
+		"CALL: kameleoonClient.TrackConversionRevenue(visitorCode: %s, goalID: %s, revenue: %s,"+
+			" isUniqueIdentifier: %s)", visitorCode, goalID, revenue, isUniqueIdentifier)
 	if len(isUniqueIdentifier) > 0 {
-		isUniqueIdentifierValue = isUniqueIdentifier[0]
+		c.setUniqueIdentifier(visitorCode, isUniqueIdentifier[0])
 	}
-	return c.trackConversion(visitorCode, isUniqueIdentifierValue, goalID, revenue)
+	err := c.trackConversion(visitorCode, goalID, revenue)
+	logging.Info(
+		"RETURN: kameleoonClient.TrackConversionRevenue(visitorCode: %s, goalID: %s, revenue: %s,"+
+			" isUniqueIdentifier: %s) -> (error: %s)", visitorCode, goalID, revenue, isUniqueIdentifier, err)
+	return err
 }
 
 func (c *kameleoonClient) trackConversion(
-	visitorCode string, isUniqueIdentifier bool, goalID int, revenue ...float64,
+	visitorCode string, goalID int, revenue ...float64,
 ) error {
 	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
 		return err
@@ -357,98 +421,161 @@ func (c *kameleoonClient) trackConversion(
 		conv = types.NewConversion(goalID)
 	}
 	c.AddData(visitorCode, conv)
-	c.FlushVisitor(visitorCode, isUniqueIdentifier)
+	c.trackingManager.AddVisitorCode(visitorCode)
 	return nil
 }
 
 func (c *kameleoonClient) FlushVisitor(visitorCode string, isUniqueIdentifier ...bool) error {
-	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
-		return err
+	logging.Info("CALL: kameleoonClient.FlushVisitor(visitorCode: %s, isUniqueIdentifier: %s)",
+		visitorCode, isUniqueIdentifier)
+	err := utils.ValidateVisitorCode(visitorCode)
+	if err == nil {
+		if len(isUniqueIdentifier) > 0 {
+			c.setUniqueIdentifier(visitorCode, isUniqueIdentifier[0])
+		}
+		c.trackingManager.AddVisitorCode(visitorCode)
 	}
-	var isUniqueIdentifierValue bool
-	if len(isUniqueIdentifier) > 0 {
-		isUniqueIdentifierValue = isUniqueIdentifier[0]
-	}
-	c.sendTrackingRequest(visitorCode, nil, true, isUniqueIdentifierValue)
-	return nil
+	logging.Info("RETURN: kameleoonClient.FlushVisitor(visitorCode: %s, isUniqueIdentifier: %s) -> (error: %s)",
+		visitorCode, isUniqueIdentifier, err)
+	return err
 }
 
-func (c *kameleoonClient) FlushAll() {
+func (c *kameleoonClient) FlushVisitorInstantly(visitorCode string) error {
+	logging.Info("CALL: kameleoonClient.FlushVisitorInstantly(visitorCode: %s)", visitorCode)
+	err := utils.ValidateVisitorCode(visitorCode)
+	if err == nil {
+		c.trackingManager.TrackVisitor(visitorCode)
+	}
+	logging.Info("RETURN: kameleoonClient.FlushVisitorInstantly(visitorCode: %s) -> (error: %s)", visitorCode, err)
+	return err
+}
+
+func (c *kameleoonClient) FlushAll(instant ...bool) {
+	logging.Info("CALL: kameleoonClient.FlushAll(instant: %s)", instant)
 	c.visitorManager.Enumerate(func(vc string, v storage.Visitor) bool {
-		c.sendTrackingRequest(vc, v, false, false)
+		notEmpty := false
+		v.EnumerateSendableData(func(s types.Sendable) bool {
+			notEmpty = true
+			return false
+		})
+		if notEmpty {
+			c.trackingManager.AddVisitorCode(vc)
+		}
 		return true
 	})
+	if (len(instant) > 0) && instant[0] {
+		c.trackingManager.TrackAll()
+	}
+	logging.Info("RETURN: kameleoonClient.FlushAll(instant: %s)", instant)
 }
 
 func (c *kameleoonClient) GetFeatureVariationKey(
 	visitorCode string, featureKey string, isUniqueIdentifier ...bool,
 ) (string, error) {
-	var isUniqueIdentifierValue bool
+	logging.Info(
+		"CALL: kameleoonClient.GetFeatureVariationKey(visitorCode: %s, featureKey: %s, isUniqueIdentifier: %s)",
+		visitorCode, featureKey, isUniqueIdentifier)
 	if len(isUniqueIdentifier) > 0 {
-		isUniqueIdentifierValue = isUniqueIdentifier[0]
+		c.setUniqueIdentifier(visitorCode, isUniqueIdentifier[0])
 	}
-	_, variationKey, err := c.getFeatureVariationKey(visitorCode, isUniqueIdentifierValue, featureKey)
+	_, variationKey, err := c.getFeatureVariationKey(visitorCode, featureKey)
+	logging.Info(
+		"RETURN: kameleoonClient.GetFeatureVariationKey(visitorCode: %s, featureKey: %s, isUniqueIdentifier: %s) "+
+			"-> (variationKey: %s, error: %s)", visitorCode, featureKey, isUniqueIdentifier, variationKey, err)
 	return variationKey, err
 }
 
 // getFeatureVariationKey is a helper method for getting variation key for feature flag
 func (c *kameleoonClient) getFeatureVariationKey(
-	visitorCode string, isUniqueIdentifier bool, featureKey string,
-) (*configuration.FeatureFlag, string, error) {
+	visitorCode string, featureKey string,
+) (types.FeatureFlag, string, error) {
 	// validate that visitor code is acceptable else throw VisitorCodeNotValid exception
+	logging.Debug(
+		"CALL: kameleoonClient.getFeatureVariationKey(visitorCode: %s, featureKey: %s)",
+		visitorCode, featureKey)
 	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
-		return nil, string(types.VariationOff), err
+		variationKey := string(types.VariationOff)
+		logging.Debug(
+			"RETURN: kameleoonClient.getFeatureVariationKey(visitorCode: %s, featureKey: %s) -> (featureFlag: <nil>, "+
+				"variationKey: %s, error: %s)", visitorCode, featureKey, variationKey, err)
+		return nil, variationKey, err
 	}
+	var err error
+	var variationKey string
+	var featureFlag types.FeatureFlag
 	// find enabled feature flag else return an error
-	featureFlag, err := c.dataFile.GetFeatureFlag(featureKey)
+	featureFlag, err = c.dataManager.DataFile().GetFeatureFlag(featureKey)
 	if err != nil {
-		return nil, string(types.VariationOff), err
+		variationKey = string(types.VariationOff)
+	} else {
+		variation, rule := c.calculateVariationRuleForFeature(visitorCode, featureFlag)
+		// get variation key from feature flag
+		defaultVariationKey := featureFlag.GetDefaultVariationKey()
+		variationKey = c.calculateVariationKey(variation, rule, &defaultVariationKey)
+
+		c.assignFeatureVariation(visitorCode, rule, variation)
+		c.trackingManager.AddVisitorCode(visitorCode)
 	}
-	variation, rule := c.calculateVariationRuleForFeature(visitorCode, featureFlag)
-	// get variation key from feature flag
-	variationKey := c.calculateVariationKey(variation, rule, &featureFlag.DefaultVariationKey)
 
-	visitor := c.assignFeatureVariation(visitorCode, rule, variation)
-	c.sendTrackingRequest(visitorCode, visitor, true, isUniqueIdentifier)
-
-	return featureFlag, variationKey, nil
+	logging.Debug(
+		"RETURN: kameleoonClient.getFeatureVariationKey(visitorCode: %s, featureKey: %s) -> (featureFlag: %s, "+
+			"variationKey: %s, error: %s)",
+		visitorCode, featureKey, featureFlag, variationKey, err)
+	return featureFlag, variationKey, err
 }
-func (c *kameleoonClient) assignFeatureVariation(visitorCode string,
-	rule *configuration.Rule, variation *types.VariationByExposition) storage.Visitor {
-	var visitor storage.Visitor
+func (c *kameleoonClient) assignFeatureVariation(
+	visitorCode string, rule types.Rule, variation *types.VariationByExposition,
+) {
+	logging.Debug(
+		"CALL: kameleoonClient.assignFeatureVariation(visitorCode: %s, rule: %s, variation: %s)",
+		visitorCode, rule, variation)
 	if rule != nil {
 		if (variation != nil) && (variation.VariationID != nil) {
-			visitor = c.visitorManager.GetOrCreateVisitor(visitorCode)
-			asVariation := types.NewAssignedVariation(rule.ExperimentId, *variation.VariationID, rule.Type)
+			visitor := c.visitorManager.GetOrCreateVisitor(visitorCode)
+			asVariation := types.NewAssignedVariation(
+				rule.GetRuleBase().ExperimentId, *variation.VariationID, rule.GetRuleBase().Type,
+			)
 			visitor.AssignVariation(asVariation)
 		}
 	}
-	return visitor
+	logging.Debug(
+		"RETURN: kameleoonClient.assignFeatureVariation(visitorCode: %s, rule: %s, variation: %s)",
+		visitorCode, rule, variation)
 }
 
-func (c *kameleoonClient) calculateVariationKey(varByExp *types.VariationByExposition,
-	rule *configuration.Rule, defaultVariationKey *string) string {
+func (c *kameleoonClient) calculateVariationKey(
+	varByExp *types.VariationByExposition, rule types.Rule, defaultVariationKey *string,
+) string {
+	logging.Debug("CALL: kameleoonClient.calculateVariationKey(varByExp: %s, rule: %s, defaultVariationKey: %s)",
+		varByExp, rule, defaultVariationKey)
+	var variationKey string
 	if varByExp != nil {
-		return varByExp.VariationKey
+		variationKey = varByExp.VariationKey
 	} else if rule != nil && rule.IsExperimentType() {
-		return string(types.VariationOff)
+		variationKey = string(types.VariationOff)
 	} else {
-		return *defaultVariationKey
+		variationKey = *defaultVariationKey
 	}
+	logging.Debug(
+		"RETURN: kameleoonClient.calculateVariationKey(varByExp: %s, rule: %s, defaultVariationKey: %s) -> "+
+			"(variationKey: %s)", varByExp, rule, defaultVariationKey, variationKey)
+	return variationKey
 }
 
 // getVariationRuleForFeature is a helper method for calculate variation key for feature flag
 func (c *kameleoonClient) calculateVariationRuleForFeature(
-	visitorCode string, featureFlag *configuration.FeatureFlag,
-) (*types.VariationByExposition, *configuration.Rule) {
+	visitorCode string, featureFlag types.FeatureFlag,
+) (*types.VariationByExposition, types.Rule) {
+	logging.Debug("CALL: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)",
+		visitorCode, featureFlag)
 	codeForHash := visitorCode
 	if visitor := c.visitorManager.GetVisitor(visitorCode); (visitor != nil) && (visitor.MappingIdentifier() != nil) {
 		codeForHash = *visitor.MappingIdentifier()
 	}
 	// no rules -> return DefaultVariationKey
-	for _, rule := range featureFlag.Rules {
+	for _, rule := range featureFlag.GetRules() {
 		//check if visitor is targeted for rule, else next rule
-		if c.targetingManager.CheckTargeting(visitorCode, rule.ExperimentId, &rule) {
+		if c.targetingManager.CheckTargeting(visitorCode, rule.GetRuleBase().ExperimentId, rule) {
 
 			// Disable searching in variation storage (uncommented if you need use variation storage)
 			// check for saved variation for rule if it's experimentation rule
@@ -457,22 +584,34 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 			// }
 
 			//uses for rule exposition
-			hashRule := utils.GetHashDoubleRule(codeForHash, rule.Id, rule.RespoolTime)
+			hashRule := utils.GetHashDoubleRule(codeForHash, rule.GetRuleBase().Id, rule.GetRuleBase().RespoolTime)
+			logging.Debug("Calculated hashRule: %s for visitorCode: %s", hashRule, codeForHash)
 			//check main expostion for rule with hashRule
-			if hashRule <= rule.Exposition {
+			if hashRule <= rule.GetRuleBase().Exposition {
 				if rule.IsTargetDeliveryType() {
 					var variation *types.VariationByExposition
-					if len(rule.VariationByExposition) > 0 {
-						variation = &rule.VariationByExposition[0]
+					if len(rule.GetRuleBase().VariationByExposition) > 0 {
+						variation = &rule.GetRuleBase().VariationByExposition[0]
 					}
-					return variation, &rule
+					logging.Debug(
+						"RETURN: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)"+
+							" -> (variation: %s, rule: %s)",
+						visitorCode, featureFlag, variation, &rule)
+					return variation, rule
 				}
 				//uses for variation's expositions
-				hashVariation := utils.GetHashDoubleRule(codeForHash, rule.ExperimentId, rule.RespoolTime)
+				hashVariation := utils.GetHashDoubleRule(
+					codeForHash, rule.GetRuleBase().ExperimentId, rule.GetRuleBase().RespoolTime,
+				)
+				logging.Debug("Calculated hashVariation: %s for visitorCode: %s", hashVariation, codeForHash)
 				// get variation with new hashVariation
 				variation := rule.GetVariationByHash(hashVariation)
 				if variation != nil {
-					return variation, &rule
+					logging.Debug(
+						"RETURN: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)"+
+							" -> (variation: %s, rule: %s)",
+						visitorCode, featureFlag, variation, &rule)
+					return variation, rule
 				}
 			}
 			if rule.IsTargetDeliveryType() {
@@ -480,6 +619,9 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 			}
 		}
 	}
+	logging.Debug(
+		"RETURN: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s) -> "+
+			"(variation: <nil>, rule: <nil>)", visitorCode, featureFlag)
 	return nil, nil
 }
 
@@ -498,52 +640,82 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 func (c *kameleoonClient) GetFeatureVariable(
 	visitorCode string, featureKey string, variableKey string, isUniqueIdentifier ...bool,
 ) (interface{}, error) {
-	var isUniqueIdentifierValue bool
+	logging.Info(
+		"CALL: kameleoonClient.GetFeatureVariable(visitorCode: %s, featureKey: %s, variableKey: %s,"+
+			" isUniqueIdentifier: %s)", visitorCode, featureKey, variableKey, isUniqueIdentifier)
 	if len(isUniqueIdentifier) > 0 {
-		isUniqueIdentifierValue = isUniqueIdentifier[0]
+		c.setUniqueIdentifier(visitorCode, isUniqueIdentifier[0])
 	}
-	featureFlag, variationKey, err := c.getFeatureVariationKey(visitorCode, isUniqueIdentifierValue, featureKey)
-	if err != nil {
-		return nil, err
+	var variableValue interface{}
+	featureFlag, variationKey, err := c.getFeatureVariationKey(visitorCode, featureKey)
+	if err == nil {
+		variation, exist := featureFlag.GetVariationByKey(variationKey)
+		if !exist {
+			err = errs.NewFeatureVariationNotFound(featureKey, variationKey)
+		} else {
+			variable, exist := variation.GetVariableByKey(variableKey)
+			if !exist {
+				err = errs.NewFeatureVariableNotFound(featureKey, variationKey, variableKey)
+			} else {
+				variableValue = parseFeatureVariableV2(variable)
+			}
+		}
 	}
-	variation, exist := featureFlag.GetVariationByKey(variationKey)
-	if !exist {
-		return nil, errs.NewFeatureVariationNotFound(featureKey, variationKey)
-	}
-	variable, exist := variation.GetVariableByKey(variableKey)
-	if !exist {
-		return nil, errs.NewFeatureVariableNotFound(featureKey, variationKey, variableKey)
-	}
-	return parseFeatureVariableV2(variable), nil
+
+	logging.Info(
+		"RETURN: kameleoonClient.GetFeatureVariable(visitorCode: %s, featureKey: %s, variableKey: %s, "+
+			"isUniqueIdentifier: %s) -> (variable: %s, error: %s)",
+		visitorCode, featureKey, variableKey, isUniqueIdentifier, variableValue, err)
+	return variableValue, err
 }
 
 func (c *kameleoonClient) IsFeatureActive(
 	visitorCode string, featureKey string, isUniqueIdentifier ...bool,
 ) (bool, error) {
+	logging.Info(
+		"CALL: kameleoonClient.IsFeatureActive(visitorCode: %s, featureKey: %s, isUniqueIdentifier: %s)",
+		visitorCode, featureKey, isUniqueIdentifier)
 	variationKey, err := c.GetFeatureVariationKey(visitorCode, featureKey, isUniqueIdentifier...)
+	var isFeatureActive bool
 	switch err.(type) {
 	case *errs.FeatureEnvironmentDisabled:
-		return false, nil
+		{
+			isFeatureActive = false
+			err = nil
+		}
 	default:
-		return variationKey != string(types.VariationOff), err
+		{
+			isFeatureActive = variationKey != string(types.VariationOff)
+		}
 	}
+	logging.Info(
+		"RETURN: kameleoonClient.IsFeatureActive(visitorCode: %s, featureKey: %s, isUniqueIdentifier: %s) -> "+
+			"(isFeatureActive: %s, error: %s)", visitorCode, featureKey, isUniqueIdentifier, isFeatureActive, err)
+	return isFeatureActive, err
 }
 
 func (c *kameleoonClient) GetFeatureVariationVariables(featureKey string,
 	variationKey string) (map[string]interface{}, error) {
-	featureFlag, err := c.dataFile.GetFeatureFlag(featureKey)
-	if err != nil {
-		return nil, err
+	logging.Info(
+		"CALL: kameleoonClient.GetFeatureVariationVariables(featureKey: %s, variationKey: %s)",
+		featureKey, variationKey)
+	var mapVariableValues map[string]interface{}
+	featureFlag, err := c.dataManager.DataFile().GetFeatureFlag(featureKey)
+	if err == nil {
+		variation, exist := featureFlag.GetVariationByKey(variationKey)
+		if !exist {
+			err = errs.NewFeatureVariationNotFound(featureKey, variationKey)
+		} else {
+			mapVariableValues = make(map[string]interface{})
+			for _, variable := range variation.Variables {
+				mapVariableValues[variable.Key] = parseFeatureVariableV2(&variable)
+			}
+		}
 	}
-	variation, exist := featureFlag.GetVariationByKey(variationKey)
-	if !exist {
-		return nil, errs.NewFeatureVariationNotFound(featureKey, variationKey)
-	}
-	mapVariableValues := make(map[string]interface{})
-	for _, variable := range variation.Variables {
-		mapVariableValues[variable.Key] = parseFeatureVariableV2(&variable)
-	}
-	return mapVariableValues, nil
+	logging.Info(
+		"RETURN: kameleoonClient.GetFeatureVariationVariables(featureKey: %s, variationKey: %s) -> "+
+			"(variables: %s, error: %s)", featureKey, variationKey, mapVariableValues, err)
+	return mapVariableValues, err
 }
 
 func parseFeatureVariableV2(variable *types.Variable) interface{} {
@@ -562,7 +734,11 @@ func parseFeatureVariableV2(variable *types.Variable) interface{} {
 }
 
 func (c *kameleoonClient) GetRemoteData(key string, timeout ...time.Duration) ([]byte, error) {
-	return c.remoteDataManager.GetData(key, timeout...)
+	logging.Info("CALL: kameleoonClient.GetRemoteData(key: %s, timeout: %s)", key, timeout)
+	remoteData, err := c.remoteDataManager.GetData(key, timeout...)
+	logging.Info("RETURN: kameleoonClient.GetRemoteData(key: %s, timeout: %s) -> (remoteData: %s, error: %s)",
+		remoteData, err)
+	return remoteData, err
 }
 
 func (c *kameleoonClient) GetRemoteVisitorData(
@@ -570,13 +746,22 @@ func (c *kameleoonClient) GetRemoteVisitorData(
 	addData bool,
 	timeout ...time.Duration,
 ) ([]types.Data, error) {
+	logging.Info("CALL: kameleoonClient.GetRemoteVisitorData(visitorCode: %s, addData: %s, timeout: %s)",
+		visitorCode, addData, timeout)
 	filter := types.DefaultRemoteVisitorDataFilter()
-	return c.remoteDataManager.GetVisitorData(visitorCode, filter, addData, false, timeout...)
+	visitorData, err := c.remoteDataManager.GetVisitorData(visitorCode, filter, addData, timeout...)
+	logging.Info(
+		"RETURN: kameleoonClient.GetRemoteVisitorData(visitorCode: %s, addData: %s, timeout: %s) -> "+
+			"(visitorData: %s, error: %s)", visitorCode, addData, timeout, visitorData, err)
+	return visitorData, err
 }
 
 func (c *kameleoonClient) GetRemoteVisitorDataWithOptParams(
 	visitorCode string, addData bool, filter types.RemoteVisitorDataFilter, params ...RemoteVisitorDataOptParams,
 ) ([]types.Data, error) {
+	logging.Info(
+		"CALL: kameleoonClient.GetRemoteVisitorDataWithOptParams(visitorCode: %s, addData: %s, filter: %s, params: %s)",
+		visitorCode, addData, filter, params)
 	var p RemoteVisitorDataOptParams
 	if len(params) > 0 {
 		p = params[0]
@@ -585,75 +770,46 @@ func (c *kameleoonClient) GetRemoteVisitorDataWithOptParams(
 	if p.Timeout > 0 {
 		timeout = []time.Duration{p.Timeout}
 	}
-	return c.remoteDataManager.GetVisitorData(
-		visitorCode, filter, addData, p.IsUniqueIdentifier, timeout...,
-	)
+	c.setUniqueIdentifier(visitorCode, p.IsUniqueIdentifier)
+	visitorData, err := c.remoteDataManager.GetVisitorData(visitorCode, filter, addData, timeout...)
+	logging.Info(
+		"RETURN: kameleoonClient.GetRemoteVisitorDataWithOptParams(visitorCode: %s, addData: %s, filter: %s, "+
+			"params: %s) -> (visitorData: %s, error: %s)", visitorCode, addData, filter, params, visitorData, err)
+	return visitorData, err
 }
 
-func (c *kameleoonClient) log(format string, args ...interface{}) {
-	c.cfg.Logger.Printf(format, args...)
+func (c *kameleoonClient) GetRemoteVisitorDataWithFilter(
+	visitorCode string, addData bool, filter types.RemoteVisitorDataFilter, params ...RemoteVisitorDataOptParams,
+) ([]types.Data, error) {
+	logging.Info(
+		"CALL: kameleoonClient.GetRemoteVisitorDataWithFilter(visitorCode: %s, addData: %s, filter: %s, params: %s)",
+		visitorCode, addData, filter, params)
+	var p RemoteVisitorDataOptParams
+	if len(params) > 0 {
+		p = params[0]
+	}
+	var timeout []time.Duration
+	if p.Timeout > 0 {
+		timeout = []time.Duration{p.Timeout}
+	}
+	remoteVisitorData, err := c.remoteDataManager.GetVisitorData(visitorCode, filter, addData, timeout...)
+	logging.Info(
+		"RETURN: kameleoonClient.GetRemoteVisitorDataWithFilter(visitorCode: %s, addData: %s, filter: %s,"+
+			" params: %s) -> (remoteVisitorData: %s, error: %s)",
+		visitorCode, addData, filter, params, remoteVisitorData, err)
+	return remoteVisitorData, err
 }
 
 func (c *kameleoonClient) updateConfigInitially() {
-	url := c.networkManager.GetUrlProvider().MakeRealTimeUrl()
-	err := c.configurationUpdateService.Start(c.cfg.RefreshInterval, url, c.fetchConfig, nil, c.cfg.Logger)
+	logging.Debug("CALL: kameleoonClient.updateConfigInitially()")
+	err := c.configurationManager.Start()
 	c.readiness.set(err)
+	logging.Debug("RETURN: kameleoonClient.updateConfigInitially()")
 }
 
 func (c *kameleoonClient) OnUpdateConfiguration(handler func()) {
-	c.updateConfigurationHandler = handler
-}
-
-func (c *kameleoonClient) fetchConfig(ts int64) error {
-	if clientConfig, err := c.requestClientConfig(ts); err == nil {
-		c.updateDataFile(configuration.NewDataFile(clientConfig, c.cfg.Environment))
-		if ts != -1 {
-			c.updateConfigurationHandler()
-		}
-		return nil
-	} else {
-		c.log("Failed to fetch: %v", err)
-		return err
-	}
-}
-
-func (c *kameleoonClient) updateDataFile(df *configuration.DataFile) {
-	c.m.Lock()
-	defer c.m.Unlock()
-	c.dataFile = df
-	c.configurationUpdateService.UpdateSettings(df.Settings())
-	c.networkManager.GetUrlProvider().ApplyDataApiDomain(df.Settings().DataApiDomain())
-	c.updateCookieManagerConsentRequired()
-	c.visitorManager.SetCustomDataInfo(df.CustomDataInfo())
-	c.targetingManager.SetDataFile(df)
-}
-
-func (c *kameleoonClient) updateCookieManagerConsentRequired() {
-	consentRequired := c.dataFile.Settings().IsConsentRequired() && !c.dataFile.HasAnyTargetedDeliveryRule()
-	c.cookieManager.SetConsentRequired(consentRequired)
-}
-
-func (c *kameleoonClient) requestClientConfig(ts int64) (configuration.Configuration, error) {
-	if ts == -1 {
-		c.log("Fetching configuration")
-	} else {
-		c.log("Fetching configuration for TS:%v", ts)
-	}
-	var campaigns configuration.Configuration
-	out, err := c.networkManager.FetchConfiguration(ts)
-	if err == nil {
-		if len(out) == 0 {
-			err = errs.NewInternalError("Response is empty")
-		} else {
-			err = json.Unmarshal(out, &campaigns)
-		}
-	}
-	if err == nil {
-		c.log("Configuraiton fetched: %v", campaigns)
-	} else {
-		c.log("Failed to fetch client-config: %v", err)
-	}
-	return campaigns, err
+	c.configurationManager.OnUpdateConfiguration(handler)
+	logging.Info("CALL/RETURN: kameleoonClient.OnUpdateConfiguration(handler)")
 }
 
 /*
@@ -675,36 +831,49 @@ func (c *kameleoonClient) getValidSavedVariation(visitorCode string, experiment 
 //*/
 
 func (c *kameleoonClient) GetFeatureList() []string {
-	featureFlags := c.dataFile.FeatureFlags()
+	logging.Info("CALL: kameleoonClient.GetFeatureList()")
+	featureFlags := c.dataManager.DataFile().GetFeatureFlags()
 	arrayKeys := make([]string, 0, len(featureFlags))
 	for _, ff := range featureFlags {
-		arrayKeys = append(arrayKeys, ff.FeatureKey)
+		arrayKeys = append(arrayKeys, ff.GetFeatureKey())
 	}
+	logging.Info("RETURN: kameleoonClient.GetFeatureList() -> (features: %s)", arrayKeys)
 	return arrayKeys
 }
 
 func (c *kameleoonClient) GetActiveFeatureListForVisitor(visitorCode string) ([]string, error) {
-	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
-		return []string{}, err
-	}
-	featureFlags := c.dataFile.FeatureFlags()
-	arrayIds := make([]string, 0, len(featureFlags))
-	for _, ff := range featureFlags {
-		variation, rule := c.calculateVariationRuleForFeature(visitorCode, ff)
-		if ff.GetVariationKey(variation, rule) != string(types.VariationOff) {
-			arrayIds = append(arrayIds, ff.FeatureKey)
+	logging.Info("CALL: kameleoonClient.GetActiveFeatureListForVisitor(visitorCode: %s)", visitorCode)
+	err := utils.ValidateVisitorCode(visitorCode)
+	var arrayIds []string
+	if err == nil {
+		featureFlags := c.dataManager.DataFile().GetFeatureFlags()
+		arrayIds = make([]string, 0, len(featureFlags))
+		for _, ff := range featureFlags {
+			variation, rule := c.calculateVariationRuleForFeature(visitorCode, ff)
+			if ff.GetVariationKey(variation, rule) != string(types.VariationOff) {
+				arrayIds = append(arrayIds, ff.GetFeatureKey())
+			}
 		}
+	} else {
+		arrayIds = []string{}
 	}
-	return arrayIds, nil
+	logging.Info(
+		"RETURN: kameleoonClient.GetActiveFeatureListForVisitor(visitorCode: %s) -> (activeFeatures: %s, error: %s)",
+		visitorCode, arrayIds, err)
+	return arrayIds, err
 }
 
 func (c *kameleoonClient) GetActiveFeatures(visitorCode string) (map[string]types.Variation, error) {
+	logging.Info("CALL: kameleoonClient.GetActiveFeatures(visitorCode: %s)", visitorCode)
 	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
+		logging.Info(
+			"RETURN: kameleoonClient.GetActiveFeatures(visitorCode: %s) -> (activeFeatures: <nil>, error: %s)",
+			visitorCode, err)
 		return nil, err
 	}
 	mapActiveFeatures := make(map[string]types.Variation)
-	for _, ff := range c.dataFile.FeatureFlags() {
-		if !ff.EnvironmentEnabled {
+	for _, ff := range c.dataManager.DataFile().GetFeatureFlags() {
+		if !ff.GetEnvironmentEnabled() {
 			continue
 		}
 
@@ -733,46 +902,71 @@ func (c *kameleoonClient) GetActiveFeatures(visitorCode string) (map[string]type
 
 		var experimentID *int
 		if rule != nil {
-			experimentID = &rule.ExperimentId
+			experimentID = &rule.GetRuleBase().ExperimentId
 		}
 
-		mapActiveFeatures[ff.FeatureKey] = types.Variation{
+		mapActiveFeatures[ff.GetFeatureKey()] = types.Variation{
 			Key:          variationKey,
 			VariationID:  variationID,
 			ExperimentID: experimentID,
 			Variables:    variables,
 		}
 	}
-
+	logging.Info(
+		"RETURN: kameleoonClient.GetActiveFeatures(visitorCode: %s) -> (activeFeatures: %s, error: <nil>)",
+		visitorCode, mapActiveFeatures)
 	return mapActiveFeatures, nil
 }
 
 func (c *kameleoonClient) GetEngineTrackingCode(visitorCode string) string {
+	logging.Info("CALL: kameleoonClient.GetEngineTrackingCode(visitorCode: %s)", visitorCode)
+	var engineTrackingCode string
 	if c.hybridManager == nil {
-		c.log("HybridManager wasn't initialized properly. GetEngineTrackingCode method isn't avaiable")
-		return ""
+		logging.Error("HybridManager wasn't initialized properly. GetEngineTrackingCode method isn't avaiable")
+		engineTrackingCode = ""
+	} else {
+		visitor := c.visitorManager.GetVisitor(visitorCode)
+		var variations storage.DataMapStorage[int, *types.AssignedVariation]
+		if visitor != nil {
+			variations = visitor.Variations()
+		}
+		engineTrackingCode = c.hybridManager.GetEngineTrackingCode(variations)
 	}
-	visitor := c.visitorManager.GetVisitor(visitorCode)
-	var variations storage.DataMapStorage[int, *types.AssignedVariation]
-	if visitor != nil {
-		variations = visitor.Variations()
-	}
-	return c.hybridManager.GetEngineTrackingCode(variations)
+	logging.Info("RETURN: kameleoonClient.GetEngineTrackingCode(visitorCode: %s) -> (engineTrackingCode: %s)",
+		visitorCode, engineTrackingCode)
+	return engineTrackingCode
 }
 
 func (c *kameleoonClient) GetVisitorWarehouseAudience(params VisitorWarehouseAudienceParams) (*types.CustomData, error) {
-	return c.warehouseManager.GetVisitorWarehouseAudience(
+	logging.Info("CALL: kameleoonClient.GetVisitorWarehouseAudience(params: %s)", params)
+	customData, err := c.warehouseManager.GetVisitorWarehouseAudience(
 		params.VisitorCode, params.WarehouseKey, params.CustomDataIndex, params.Timeout)
+	logging.Info("RETURN: kameleoonClient.GetVisitorWarehouseAudience(params: %s) -> (customData: %s, error: %s)",
+		params, customData, err)
+	return customData, err
 }
 
 func (c *kameleoonClient) GetVisitorWarehouseAudienceWithOptParams(
 	visitorCode string, customDataIndex int, params ...VisitorWarehouseAudienceOptParams,
 ) (*types.CustomData, error) {
+	logging.Info(
+		"CALL: kameleoonClient.GetVisitorWarehouseAudienceWithOptParams(visitorCode: %s, customDataIndex: %s, "+
+			"params: %s)", visitorCode, customDataIndex, params)
 	var p VisitorWarehouseAudienceOptParams
 	if len(params) > 0 {
 		p = params[0]
 	}
-	return c.warehouseManager.GetVisitorWarehouseAudience(
+	customData, err := c.warehouseManager.GetVisitorWarehouseAudience(
 		visitorCode, p.WarehouseKey, customDataIndex, p.Timeout,
 	)
+	logging.Info(
+		"RETURN: kameleoonClient.GetVisitorWarehouseAudienceWithOptParams(visitorCode: %s, customDataIndex: %s, "+
+			"params: %s) -> (customData: %s, error: %s)", visitorCode, customDataIndex, params, customData, err)
+	return customData, err
+}
+
+func (c *kameleoonClient) setUniqueIdentifier(visitorCode string, isUniqueIdentifier bool) {
+	logging.Warning(
+		"The 'isUniqueIdentifier' parameter is deprecated. Please, add 'UniqueIdentifier' to a visitor instead.")
+	c.visitorManager.AddData(visitorCode, types.NewUniqueIdentifier(isUniqueIdentifier))
 }

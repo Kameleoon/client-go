@@ -55,6 +55,18 @@ func NewGeolocationWithCoords(latitude float64, longitude float64, country strin
 	}
 }
 
+func (g Geolocation) String() string {
+	return fmt.Sprintf(
+		"Geolocation{country:'%v',region:'%v',city:'%v',postal_code:'%v',latitude:%v,longitude:%v}",
+		g.country,
+		g.region,
+		g.city,
+		g.postalCode,
+		g.latitude,
+		g.longitude,
+	)
+}
+
 func extractNewGeolocationArgs(args []string) (string, string, string) {
 	var region, city, postalCode string
 	if len(args) >= 1 {

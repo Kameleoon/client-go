@@ -45,7 +45,7 @@ func (t *Tree) StringPadding(pads int) string {
 	return s.String()
 }
 
-func (t *Tree) String() string {
+func (t Tree) String() string {
 	return t.StringPadding(0)
 }
 

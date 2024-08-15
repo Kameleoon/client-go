@@ -1,10 +1,10 @@
 package warehouse
 
 import (
+	"github.com/Kameleoon/client-go/v3/logging"
 	"encoding/json"
 	"time"
 
-	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/network"
 	"github.com/Kameleoon/client-go/v3/storage"
 	"github.com/Kameleoon/client-go/v3/types"
@@ -23,23 +23,30 @@ type warehouseResponse struct {
 type warehouseManagerImpl struct {
 	networkManager network.NetworkManager
 	visitorManager storage.VisitorManager
-	logger         logging.Logger
 }
 
 func NewWarehouseManagerImpl(networkManager network.NetworkManager,
-	visitorManager storage.VisitorManager, logger logging.Logger) *warehouseManagerImpl {
-
-	return &warehouseManagerImpl{
+	visitorManager storage.VisitorManager) *warehouseManagerImpl {
+	logging.Debug("CALL: NewWarehouseManagerImpl(networkManager, visitorManager)")
+	warehouseManagerImpl := &warehouseManagerImpl{
 		networkManager: networkManager,
 		visitorManager: visitorManager,
-		logger:         logger,
 	}
+	logging.Debug("RETURN: NewWarehouseManagerImpl(networkManager, visitorManager)")
+	return warehouseManagerImpl
 }
 
 func (wm *warehouseManagerImpl) GetVisitorWarehouseAudience(
 	visitorCode string, warehouseKey string, customDataIndex int, timeout time.Duration) (*types.CustomData, error) {
+	logging.Debug(
+		"CALL: warehouseManagerImpl.GetVisitorWarehouseAudience(visitorCode: %s, warehouseKey: %s, "+
+			"customDataIndex: %s, timeout: %s)", visitorCode, warehouseKey, customDataIndex, timeout)
 
 	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
+		logging.Debug(
+			"RETURN: warehouseManagerImpl.GetVisitorWarehouseAudience(visitorCode: %s, warehouseKey: %s, "+
+				"customDataIndex: %s, timeout: %s) -> (customData: <nil>, error: %s)",
+			visitorCode, warehouseKey, customDataIndex, timeout, err)
 		return nil, err
 	}
 
@@ -47,14 +54,20 @@ func (wm *warehouseManagerImpl) GetVisitorWarehouseAudience(
 
 	remoteData, err := wm.networkManager.GetRemoteData(remoteDataKey, timeout)
 	if err != nil {
-		wm.logger.Printf("Kameleoon SDK: Failed to fetch visitor warehouse audience: %s", err.Error())
+		logging.Debug(
+			"RETURN: warehouseManagerImpl.GetVisitorWarehouseAudience(visitorCode: %s, warehouseKey: %s, "+
+				"customDataIndex: %s, timeout: %s) -> (customData: <nil>, error: %s)",
+			visitorCode, warehouseKey, customDataIndex, timeout, err)
 		return nil, err
 	}
 
 	var warehouseResponse warehouseResponse
 	err = json.Unmarshal(remoteData, &warehouseResponse)
 	if err != nil {
-		wm.logger.Printf("Kameleoon SDK: Failed to handle visitor warehouse audience response: %s", err.Error())
+		logging.Debug(
+			"RETURN: warehouseManagerImpl.GetVisitorWarehouseAudience(visitorCode: %s, warehouseKey: %s, "+
+				"customDataIndex: %s, timeout: %s) -> (customData: <nil>, error: %s)",
+			visitorCode, warehouseKey, customDataIndex, timeout, err)
 		return nil, err
 	}
 
@@ -64,8 +77,12 @@ func (wm *warehouseManagerImpl) GetVisitorWarehouseAudience(
 	}
 	customData := types.NewCustomData(customDataIndex, values...)
 
-	wm.visitorManager.GetOrCreateVisitor(visitorCode).AddData(wm.logger, customData)
+	wm.visitorManager.AddData(visitorCode, customData)
 
+	logging.Debug(
+		"RETURN: warehouseManagerImpl.GetVisitorWarehouseAudience(visitorCode: %s, warehouseKey: %s, "+
+			"customDataIndex: %s, timeout: %s) -> (customData: %s, error: <nil>)",
+		visitorCode, warehouseKey, customDataIndex, timeout, customData)
 	return customData, nil
 }
 

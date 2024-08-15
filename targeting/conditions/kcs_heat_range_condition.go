@@ -43,6 +43,6 @@ func (c *KcsHeatRangeCondition) checkTargeting(kcsHeat *types.KcsHeat) bool {
 	return false
 }
 
-func (c *KcsHeatRangeCondition) String() string {
+func (c KcsHeatRangeCondition) String() string {
 	return utils.JsonToString(c)
 }

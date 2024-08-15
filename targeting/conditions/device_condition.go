@@ -25,6 +25,6 @@ func (c *DeviceCondition) CheckTargeting(targetData interface{}) bool {
 	return ok && (device != nil) && (device.Type() == c.Device)
 }
 
-func (c *DeviceCondition) String() string {
+func (c DeviceCondition) String() string {
 	return utils.JsonToString(c)
 }

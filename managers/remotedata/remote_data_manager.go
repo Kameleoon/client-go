@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Kameleoon/client-go/v3/logging"
+	"github.com/Kameleoon/client-go/v3/managers/data"
 	"github.com/Kameleoon/client-go/v3/network"
 	"github.com/Kameleoon/client-go/v3/storage"
 	"github.com/Kameleoon/client-go/v3/types"
@@ -13,53 +14,57 @@ import (
 type RemoteDataManager interface {
 	GetData(key string, timeout ...time.Duration) ([]byte, error)
 	GetVisitorData(
-		visitorCode string,
-		filter types.RemoteVisitorDataFilter,
-		addData bool,
-		isUniqueIdentifier bool,
-		timeout ...time.Duration,
+		visitorCode string, filter types.RemoteVisitorDataFilter, addData bool, timeout ...time.Duration,
 	) ([]types.Data, error)
 }
 
 type remoteDataManagerImpl struct {
+	dataManager    data.DataManager
 	networkManager network.NetworkManager
 	visitorManager storage.VisitorManager
-	logger         logging.Logger
 }
 
 func NewRemoteDataManager(
+	dataManager data.DataManager,
 	networkManager network.NetworkManager,
 	visitorManager storage.VisitorManager,
-	logger logging.Logger,
 ) RemoteDataManager {
-	return &remoteDataManagerImpl{
+	remoteDataManagerImpl := &remoteDataManagerImpl{
+		dataManager:    dataManager,
 		networkManager: networkManager,
 		visitorManager: visitorManager,
-		logger:         logger,
 	}
+	logging.Debug(
+		"CALL/RETURN: NewRemoteDataManager(dataManager, networkManager, visitorManager) -> (remoteDataManagerImpl)")
+	return remoteDataManagerImpl
 }
 
 func (rdm *remoteDataManagerImpl) GetData(key string, timeout ...time.Duration) ([]byte, error) {
+	logging.Debug("CALL: remoteDataManagerImpl.GetData(key: %s, timeout: %s)", key, timeout)
 	timeoutValue := time.Duration(-1)
 	if len(timeout) > 0 {
 		timeoutValue = timeout[0]
 	}
-	rdm.logger.Printf("Retrieve data from remote source (key '%s')", key)
 	out, err := rdm.networkManager.GetRemoteData(key, timeoutValue)
 	if err != nil {
-		rdm.logger.Printf("Failed retrieve data from remote source: %v", err)
-		return nil, err
+		logging.Error("Failed to fetch remote data for %s: %s", key, err)
+		out = nil
 	}
-	return out, nil
+	logging.Debug(
+		"RETURN: remoteDataManagerImpl.GetData(key: %s, timeout: %s) -> (remoteData: %s, error: %s)",
+		key, timeout, out, err)
+	return out, err
 }
 
 func (rdm *remoteDataManagerImpl) GetVisitorData(
 	visitorCode string,
 	filter types.RemoteVisitorDataFilter,
 	addData bool,
-	isUniqueIdentifier bool,
 	timeout ...time.Duration,
 ) ([]types.Data, error) {
+	logging.Debug(
+		"CALL: remoteDataManagerImpl.GetVisitorData(visitorCode: %s, filter: %s, addData: %s, timeout: %s)",
+		visitorCode, filter, addData, timeout)
 	// TODO: Uncomment with the next major update
 	//if err := utils.ValidateVisitorCode(visitorCode); err != nil {
 	//	return nil, err
@@ -68,18 +73,37 @@ func (rdm *remoteDataManagerImpl) GetVisitorData(
 	if len(timeout) > 0 {
 		timeoutValue = timeout[0]
 	}
+	visitor := rdm.visitorManager.GetVisitor(visitorCode)
+	var isUniqueIdentifier bool
+	if visitor != nil {
+		isUniqueIdentifier = visitor.IsUniqueIdentifier()
+	}
 	out, err := rdm.networkManager.GetRemoteVisitorData(visitorCode, filter, isUniqueIdentifier, timeoutValue)
 	if err != nil {
+		logging.Error("Failed to fetch remote visitor data for %s: %s", visitorCode, err)
+		logging.Debug(
+			"RETURN: remoteDataManagerImpl.GetVisitorData(visitorCode: %s, filter: %s, addData: %s, "+
+				"isUniqueIdentifier: %s, timeout: %s) -> (remoteVisitorData: <nil>, error: %s)",
+			visitorCode, filter, addData, isUniqueIdentifier, timeout, err)
 		return nil, err
 	}
 	var data remoteVisitorData
 	if err = json.Unmarshal(out, &data); err != nil {
+		logging.Debug(
+			"RETURN: remoteDataManagerImpl.GetVisitorData(visitorCode: %s, filter: %s, addData: %s, "+
+				"isUniqueIdentifier: %s, timeout: %s) -> (remoteVisitorData: <nil>, error: %s)",
+			visitorCode, filter, addData, isUniqueIdentifier, timeout, err)
 		return nil, err
 	}
-	data.MarkVisitorDataAsSent(rdm.visitorManager.CustomDataInfo())
+	data.MarkVisitorDataAsSent(rdm.dataManager.DataFile().CustomDataInfo())
 	if addData {
-		visitor := rdm.visitorManager.GetOrCreateVisitor(visitorCode)
-		visitor.AddBaseData(rdm.logger, false, data.CollectDataToAdd()...)
+		visitor = rdm.visitorManager.GetOrCreateVisitor(visitorCode)
+		visitor.AddBaseData(false, data.CollectDataToAdd()...)
 	}
-	return data.CollectVisitorDataToReturn(), nil
+	visitorData := data.CollectVisitorDataToReturn()
+	logging.Debug(
+		"RETURN: remoteDataManagerImpl.GetVisitorData(visitorCode: %s, filter: %s, addData: %s, "+
+			"isUniqueIdentifier: %s, timeout: %s) -> (remoteVisitorData: %s, error: <nil>)",
+		visitorCode, filter, addData, isUniqueIdentifier, timeout, visitorData)
+	return visitorData, nil
 }

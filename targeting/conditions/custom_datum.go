@@ -1,6 +1,7 @@
 package conditions
 
 import (
+	"github.com/Kameleoon/client-go/v3/logging"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -35,7 +36,7 @@ type CustomDatum struct {
 }
 
 func (c *CustomDatum) CheckTargeting(targetData interface{}) bool {
-	customDataStorage, ok := targetData.(storage.DataMapStorage[int, *types.CustomData])
+	customDataStorage, ok := targetData.(storage.DataMapStorage[int, types.ICustomData])
 	if !ok || (customDataStorage == nil) {
 		return false
 	}
@@ -121,7 +122,7 @@ func (c *CustomDatum) checkTargeting(customDataValues []string) bool {
 				return exist
 			})
 		} else {
-			fmt.Println(err)
+			logging.Error("Failed parse values %s for 'Custom' condition (value): %s", c.Value, err)
 		}
 	}
 	return false
@@ -136,6 +137,6 @@ func (c *CustomDatum) contains(customDataValues []string, callback func(string) 
 	return false
 }
 
-func (c *CustomDatum) String() string {
+func (c CustomDatum) String() string {
 	return utils.JsonToString(c)
 }

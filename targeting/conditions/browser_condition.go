@@ -1,8 +1,7 @@
 package conditions
 
 import (
-	"fmt"
-
+	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/types"
 	"github.com/Kameleoon/client-go/v3/utils"
 )
@@ -43,7 +42,7 @@ func (c *BrowserCondition) checkTargeting(browser *types.Browser) bool {
 	// check the version because it's defined in condition
 	versionNumber, err := GetMajorMinorAsFloat(c.Version)
 	if err != nil {
-		fmt.Println(err)
+		logging.Error("Failed to parse version %s for 'Browser' condition: %s", c.Version, err)
 		return false
 	}
 
@@ -55,12 +54,12 @@ func (c *BrowserCondition) checkTargeting(browser *types.Browser) bool {
 	case types.OperatorLower:
 		return browser.Version() < versionNumber
 	default:
-		fmt.Printf("unexpected comparing operation for browser condition: %v\n", c.VersionMatchType)
+		logging.Error("Unexpected comparing operation for 'Browser' condition: %s", c.VersionMatchType)
 		return false
 	}
 }
 
-func (c *BrowserCondition) String() string {
+func (c BrowserCondition) String() string {
 	return utils.JsonToString(c)
 }
 

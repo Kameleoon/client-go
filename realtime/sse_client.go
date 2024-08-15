@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"github.com/Kameleoon/client-go/v3/logging"
 	"net/http"
 
 	net "github.com/subchord/go-sse"
@@ -8,14 +9,14 @@ import (
 
 type SseClient interface {
 	Init(url string) error
-	Dispose(logFunc func(string, ...interface{}))
+	Dispose()
 	GetErrorChan() <-chan error
 	GetEventChan() <-chan net.Event
 }
 
 type NetSseClient struct {
 	feed *net.SSEFeed
-	sub *net.Subscription
+	sub  *net.Subscription
 }
 
 func (sse *NetSseClient) Init(url string) error {
@@ -30,9 +31,9 @@ func (sse *NetSseClient) Init(url string) error {
 
 func (sse *NetSseClient) initFeed(url string) error {
 	headers := map[string][]string{
-		http.CanonicalHeaderKey("Accept"): {"text/event-stream"},
+		http.CanonicalHeaderKey("Accept"):        {"text/event-stream"},
 		http.CanonicalHeaderKey("Cache-Control"): {"no-cache"},
-		http.CanonicalHeaderKey("Connection"): {"Keep-Alive"},
+		http.CanonicalHeaderKey("Connection"):    {"Keep-Alive"},
 	}
 	feed, err := net.ConnectWithSSEFeed(url, headers)
 	if err != nil {
@@ -51,10 +52,10 @@ func (sse *NetSseClient) initSub() error {
 	return nil
 }
 
-func (sse *NetSseClient) Dispose(logFunc func(string, ...interface{})) {
+func (sse *NetSseClient) Dispose() {
 	defer func() { // "close of closed channel" panic occurs
 		if err := recover(); err != nil {
-			logFunc("Panic occurred during SSE dispose process: %v", err)
+			logging.Warning("Panic occurred during SSE dispose process: %s", err)
 		}
 	}()
 	if sse.feed != nil {

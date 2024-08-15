@@ -17,18 +17,20 @@ func NewQueryBuilder() *QueryBuilder {
 	return &qb
 }
 
-func (qb *QueryBuilder) Append(name string, value string) {
+func (qb *QueryBuilder) Append(name string, value string) *QueryBuilder {
 	if (len(name) > 0) && (len(value) > 0) {
 		qb.params.Set(name, value)
 	}
+	return qb
 }
 
-func (qb *QueryBuilder) String() string {
+func (qb QueryBuilder) String() string {
 	replacer := strings.NewReplacer("+", "%20")
 	return replacer.Replace(qb.params.Encode())
 }
 
 const (
+	QPBodyUA                  = "bodyUa"
 	QPBrowserIndex            = "browserIndex"
 	QPBrowserVersion          = "browserVersion"
 	QPCity                    = "city"
@@ -71,6 +73,7 @@ const (
 	QPStaticData              = "staticData"
 	QPTitle                   = "title"
 	QPTimestamp               = "ts"
+	QPUserAgent               = "userAgent"
 	QPValuesCountMap          = "valuesCountMap"
 	QPVariationId             = "variationId"
 	QPVersion                 = "version"

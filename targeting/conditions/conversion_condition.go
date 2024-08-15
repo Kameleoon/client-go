@@ -37,6 +37,6 @@ func (c *ConversionCondition) CheckTargeting(targetData interface{}) bool {
 	return false
 }
 
-func (c *ConversionCondition) String() string {
+func (c ConversionCondition) String() string {
 	return utils.JsonToString(c)
 }

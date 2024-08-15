@@ -64,6 +64,10 @@ func NewOperatingSystem(osType OperatingSystemType) *OperatingSystem {
 	return &OperatingSystem{osType: osType}
 }
 
+func (os OperatingSystem) String() string {
+	return fmt.Sprintf("OperatingSystem{osType:%v}", os.osType)
+}
+
 func (os *OperatingSystem) dataRestriction() {
 	// This method is required to separate external type `Data` from `BaseData` types
 }

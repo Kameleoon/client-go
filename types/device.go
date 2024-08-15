@@ -1,6 +1,9 @@
 package types
 
-import "github.com/Kameleoon/client-go/v3/utils"
+import (
+	"github.com/Kameleoon/client-go/v3/utils"
+	"fmt"
+)
 
 type DeviceType string
 
@@ -19,6 +22,10 @@ type Device struct {
 
 func NewDevice(deviceType DeviceType) *Device {
 	return &Device{deviceType: deviceType}
+}
+
+func (d Device) String() string {
+	return fmt.Sprintf("Device{deviceType:%v}", d.deviceType)
 }
 
 func (d *Device) dataRestriction() {}

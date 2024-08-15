@@ -34,6 +34,6 @@ func (c *GeolocationCondition) CheckTargeting(targetData interface{}) bool {
 		((c.City == "") || strings.EqualFold(geolocation.City(), c.City))
 }
 
-func (c *GeolocationCondition) String() string {
+func (c GeolocationCondition) String() string {
 	return utils.JsonToString(c)
 }

@@ -51,6 +51,10 @@ func NewBrowser(browserType BrowserType, version ...float32) *Browser {
 	return &Browser{browserType: browserType, version: versionValue}
 }
 
+func (b Browser) String() string {
+	return fmt.Sprintf("Browser{browserType:%v,version:%v}", b.browserType, b.version)
+}
+
 func (b *Browser) dataRestriction() {
 	// This method is required to separate external type `Data` from `BaseData` types
 }

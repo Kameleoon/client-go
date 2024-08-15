@@ -2,7 +2,9 @@ package configuration
 
 import (
 	"github.com/Kameleoon/client-go/v3/errs"
+	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/types"
+	"fmt"
 )
 
 type DataFile struct {
@@ -16,11 +18,22 @@ type DataFile struct {
 	variationById   map[int]*types.VariationByExposition
 }
 
+func (df DataFile) String() string {
+	return fmt.Sprintf("DataFile{environment:'%v',featureFlags:%v,settings:%v}",
+		df.environment, len(df.featureFlags), df.settings)
+}
+
 func NewDataFile(configuration Configuration, environment string) *DataFile {
+	logging.Debug("CALL: NewDataFile(configuration: %s, environment: %s)",
+		configuration, environment)
 	ffs := collectFeatureFlagsFromConfiguration(configuration)
 	featureFlagById, ruleBySegmentId, variationById := collectIndices(ffs)
-	return &DataFile{
-		customDataInfo:  configuration.CustomDataInfo,
+	cdi := configuration.CustomDataInfo
+	if cdi == nil {
+		cdi = types.NewCustomDataInfo()
+	}
+	dataFile := &DataFile{
+		customDataInfo:  cdi,
 		settings:        configuration.Settings,
 		featureFlags:    ffs,
 		environment:     environment,
@@ -29,6 +42,9 @@ func NewDataFile(configuration Configuration, environment string) *DataFile {
 		ruleBySegmentId: ruleBySegmentId,
 		variationById:   variationById,
 	}
+	logging.Debug("RETURN: NewDataFile(configuration: %s, environment: %s) -> (dataFile: %s)",
+		configuration, environment, dataFile)
+	return dataFile
 }
 
 func collectFeatureFlagsFromConfiguration(configuration Configuration) map[string]*FeatureFlag {
@@ -44,7 +60,7 @@ func (df *DataFile) CustomDataInfo() *types.CustomDataInfo {
 	return df.customDataInfo
 }
 
-func (df *DataFile) Settings() Settings {
+func (df *DataFile) Settings() types.Settings {
 	return df.settings
 }
 
@@ -52,22 +68,27 @@ func (df *DataFile) FeatureFlags() map[string]*FeatureFlag {
 	return df.featureFlags
 }
 
-func (df *DataFile) GetFeatureFlag(featureKey string) (*FeatureFlag, error) {
+func (df *DataFile) GetFeatureFlag(featureKey string) (types.FeatureFlag, error) {
+	logging.Debug("CALL: DataFile.GetFeatureFlag(featureKey: %s)", featureKey)
 	ff, contains := df.featureFlags[featureKey]
+	var err error
 	if !contains {
-		return ff, errs.NewFeatureNotFound(featureKey)
+		err = errs.NewFeatureNotFound(featureKey)
+	} else if !ff.EnvironmentEnabled {
+		err = errs.NewFeatureEnvironmentDisabled(featureKey, df.environment)
 	}
-	if !ff.EnvironmentEnabled {
-		return ff, errs.NewFeatureEnvironmentDisabled(featureKey, df.environment)
-	}
-	return ff, nil
+	logging.Debug("RETURN: DataFile.GetFeatureFlag(featureKey: %s) -> (featureFlag: %s, error: %s)",
+		featureKey, ff, err)
+	return ff, err
 }
 
 func (df *DataFile) GetFeatureFlags() map[string]types.FeatureFlag {
+	logging.Debug("CALL: DataFile.GetFeatureFlags()")
 	ffs := make(map[string]types.FeatureFlag)
 	for key, ff := range df.featureFlags {
 		ffs[key] = ff
 	}
+	logging.Debug("RETURN: DataFile.GetFeatureFlags() -> (featureFlags: %s)", ffs)
 	return ffs
 }
 

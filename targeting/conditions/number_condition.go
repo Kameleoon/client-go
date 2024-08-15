@@ -1,8 +1,7 @@
 package conditions
 
 import (
-	"fmt"
-
+	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/types"
 	"github.com/Kameleoon/client-go/v3/utils"
 	"golang.org/x/exp/constraints"
@@ -28,11 +27,11 @@ func (c *NumberCondition[T]) checkTargeting(value T) bool {
 	case types.OperatorLower:
 		return value < c.Value
 	default:
-		fmt.Printf("unexpected comparing operation for %v condition: %v\n", c.TargetingConditionBase.Type, c.MatchType)
+		logging.Error("Unexpected comparing operation for %s condition: %s", c.TargetingConditionBase.Type, c.MatchType)
 		return false
 	}
 }
 
-func (c *NumberCondition[T]) String() string {
+func (c NumberCondition[T]) String() string {
 	return utils.JsonToString(c)
 }

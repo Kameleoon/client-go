@@ -1,6 +1,26 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.4.0 - 2024-08-15
+### Features
+* Improved the tracking mechanism to consolidate multiple visitors into a single request. The new approach combines information on all affected visitors into one request, which is sent once per interval.
+  - Flush changes:
+    - The [`FlushVisitor`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#flushall--flushvisitor--flushvisitorinstantly) now enqueues the visitor's data to be tracked with next tracking interval.
+    - Added a new [`FlushVisitorInstantly`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#flushall--flushvisitor--flushvisitorinstantly) method which tracks the visitor's data instantly.
+    - Added a new parameter `instant` of the [`FlushAll`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#flushall--flushvisitor--flushvisitorinstantly) method. If the parameter's value is `true` the visitor's data is tracked instantly. Otherwise, the visitor's data will be tracked with next tracking interval. Default value of the parameter is `false`.
+* Added new configuration parameter `TrackingInterval` (`tracking_interval`) to [`KameleoonClientConfig`](https://developers.kameleoon.com/go-sdk.html#initializing-the-kameleoon-client) and the [configuration](https://developers.kameleoon.com/go-sdk.html#additional-configuration) file, which is used to set interval for tracking requests. Default value is `1000` milliseconds.
+* New Kameleoon Data type [`UniqueIdentifier`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/csharp-sdk#uniqueidentifier) is introduced. It will be used in all methods instead of `isUniqueIdentifier` parameter.
+  - The `isUniqueIdentifier` parameter is marked as deprecated for the following methods:
+    - [`FlushVisitor`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#flushall--flushvisitor--flushvisitorinstantly)
+    - [`TrackConversion`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#trackconversion)
+    - [`GetFeatureVariationKey`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getfeaturevariationkey)
+    - [`GetFeatureVariable`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getfeaturevariable)
+    - [`IsFeatureActive`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#isfeatureactive)
+  - The [`GetRemoteVisitorDataWithOptParams`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getremotevisitordata) method is deprecated. Please use the [`GetRemoteVisitorDataWithFilter`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getremotevisitordata) method instead.
+### Bug fixes
+* The SDK no longer logs failed tracking requests to the [Data API](https://developers.kameleoon.com/apis/data-api-rest/all-endpoints/post-visit-events/) when the user agent is identified as a bot (i.e., when the status code is 403).
+* Fixed an issue that caused duplicate entries in feature flag results for both anonymous and authorized/identified visitors during data reconciliation. This problem occurred when custom data of type mapping ID was not consistently sent for all sessions.
+
 ## 3.3.0 - 2024-06-21
 ### Features
 * Added [`GetActiveFeatures`](https://developers.kameleoon.com/go-sdk.html#getactivefeatures) method. It retrieves information about the active feature flags that are available for a specific visitor code. This method replaces the deprecated [`GetActiveFeatureListForVisitor`](https://developers.kameleoon.com/go-sdk.html#getactivefeaturelistforvisitor) method.

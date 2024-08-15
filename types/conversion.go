@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/Kameleoon/client-go/v3/utils"
@@ -26,6 +27,11 @@ func NewConversionWithRevenue(goalId int, revenue float64, negative ...bool) *Co
 	c := &Conversion{goalId: goalId, revenue: revenue, negative: negativeValue}
 	c.initSendale()
 	return c
+}
+
+func (c Conversion) String() string {
+	return fmt.Sprintf("Conversion{goalId:%v,revenue:%v,negative:%v}",
+		c.goalId, c.revenue, c.negative)
 }
 
 func (c *Conversion) dataRestriction() {

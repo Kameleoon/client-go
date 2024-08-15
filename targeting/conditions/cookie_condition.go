@@ -1,7 +1,7 @@
 package conditions
 
 import (
-	"fmt"
+	"github.com/Kameleoon/client-go/v3/logging"
 	"regexp"
 	"strings"
 
@@ -63,7 +63,7 @@ func (c *CookieCondition) selectValues(cookie *types.Cookie) []string {
 			}
 		}
 	default:
-		fmt.Printf("unexpected comparing operation for cookie condition (name): %v\n", c.NameMatchType)
+		logging.Error("Unexpected comparing operation for 'Cookie' condition (name): %s", c.NameMatchType)
 	}
 	return values
 }
@@ -90,11 +90,11 @@ func (c *CookieCondition) checkValues(values []string) bool {
 			}
 		}
 	default:
-		fmt.Printf("unexpected comparing operation for cookie condition (value): %v\n", c.ValueMatchType)
+		logging.Error("Unexpected comparing operation for 'Cookie' condition (value): %s", c.ValueMatchType)
 	}
 	return false
 }
 
-func (c *CookieCondition) String() string {
+func (c CookieCondition) String() string {
 	return utils.JsonToString(c)
 }

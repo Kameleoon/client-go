@@ -1,19 +1,26 @@
 package types
 
 import (
+	"github.com/Kameleoon/client-go/v3/logging"
 	"fmt"
 	"strings"
 
 	"github.com/Kameleoon/client-go/v3/utils"
 )
 
+type ICustomData interface {
+	Data
+	Sendable
+	ID() int
+	Values() []string
+}
+
 const customDataEventType = "customData"
 
 type CustomData struct {
 	duplicationUnsafeSendableBase
-	id                  int
-	values              []string
-	isMappingIdentifier bool
+	id     int
+	values []string
 }
 
 func NewCustomData(id int, values ...string) *CustomData {
@@ -21,6 +28,10 @@ func NewCustomData(id int, values ...string) *CustomData {
 		id:     id,
 		values: values,
 	}
+}
+
+func (cd CustomData) String() string {
+	return fmt.Sprintf("CustomData{id:%d,values:%s}", cd.id, logging.ObjectToString(cd.values))
 }
 
 func (cd *CustomData) dataRestriction() {
@@ -33,13 +44,6 @@ func (cd *CustomData) ID() int {
 
 func (cd *CustomData) Values() []string {
 	return cd.values
-}
-
-func (cd *CustomData) IsMappingIdentifier() bool {
-	return cd.isMappingIdentifier
-}
-func (cd *CustomData) SetIsMappingIdentifier(value bool) {
-	cd.isMappingIdentifier = value
 }
 
 func (cd *CustomData) QueryEncode() string {
@@ -56,9 +60,6 @@ func (cd *CustomData) QueryEncode() string {
 	qb.Append(utils.QPValuesCountMap, cd.encodeValues())
 	qb.Append(utils.QPOverwrite, "true")
 	qb.Append(utils.QPNonce, nonce)
-	if cd.isMappingIdentifier {
-		qb.Append(utils.QPMappingIdentifier, "true")
-	}
 	return qb.String()
 }
 func (cd *CustomData) encodeValues() string {

@@ -39,6 +39,6 @@ func (c *VisitorNewReturnCondition) CheckTargeting(targetData interface{}) bool 
 	return false
 }
 
-func (c *VisitorNewReturnCondition) String() string {
+func (c VisitorNewReturnCondition) String() string {
 	return utils.JsonToString(c)
 }

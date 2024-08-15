@@ -1,6 +1,7 @@
 package conditions
 
 import (
+	"github.com/Kameleoon/client-go/v3/logging"
 	"fmt"
 
 	"github.com/Kameleoon/client-go/v3/errs"
@@ -12,7 +13,7 @@ import (
 func NewOperatingSystemCondition(c types.TargetingCondition) *OperatingSystemCondition {
 	osType, ok := types.ParseOperatingSystemType(c.OS)
 	if !ok {
-		fmt.Printf("undefined OS for OS condition: %v\n", c.OS)
+		logging.Error("Undefined OS for 'OS' condition: %s", c.OS)
 	}
 	return &OperatingSystemCondition{
 		TargetingConditionBase: types.TargetingConditionBase{
@@ -43,7 +44,7 @@ func (c *OperatingSystemCondition) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (c *OperatingSystemCondition) CheckTargeting(targetData interface{}) bool {
+func (c OperatingSystemCondition) CheckTargeting(targetData interface{}) bool {
 	os, ok := targetData.(*types.OperatingSystem)
 	return ok && (os != nil) && (os.Type() == c.OsType)
 }

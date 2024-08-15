@@ -29,6 +29,15 @@ func NewPageViewWithTitle(url string, title string, referrers ...int) *PageView 
 	return pv
 }
 
+func (pv PageView) String() string {
+	return fmt.Sprintf(
+		"PageView{url:'%v',title:'%v',referrers:%v}",
+		pv.url,
+		pv.title,
+		pv.referrers,
+	)
+}
+
 func (pv *PageView) dataRestriction() {
 	// This method is required to separate external type `Data` from `BaseData` types
 }

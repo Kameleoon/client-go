@@ -2,7 +2,6 @@ package network
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/Kameleoon/client-go/v3/types"
@@ -38,20 +37,16 @@ func (nm *NetworkManagerImpl) GetRemoteVisitorData(
 	return nm.makeCall(&request, NetworkCallAttemptsNumberUncritical, -1)
 }
 
-func (nm *NetworkManagerImpl) SendTrackingData(
-	visitorCode string, lines []types.Sendable, userAgent string, isUniqueIdentifier bool,
-) (bool, error) {
-	if len(lines) == 0 {
+func (nm *NetworkManagerImpl) SendTrackingData(trackingLines string) (bool, error) {
+	if trackingLines == "" {
 		return false, nil
 	}
-	url := nm.UrlProvider.MakeTrackingUrl(visitorCode, isUniqueIdentifier)
-	data := formTrackingRequestData(lines)
+	url := nm.UrlProvider.MakeTrackingUrl()
 	request := Request{
 		Method:         HttpPost,
 		Url:            url,
 		ContentType:    TextContentType,
-		UserAgent:      userAgent,
-		Data:           data,
+		Data:           trackingLines,
 		Timeout:        nm.DefaultTimeout,
 		IsAuthRequired: true,
 	}
@@ -60,18 +55,4 @@ func (nm *NetworkManagerImpl) SendTrackingData(
 		return false, err
 	}
 	return true, nil
-}
-
-func formTrackingRequestData(qes []types.Sendable) string {
-	sb := strings.Builder{}
-	for _, qe := range qes {
-		line := qe.QueryEncode()
-		if len(line) > 0 {
-			if sb.Len() > 0 {
-				sb.WriteRune('\n')
-			}
-			sb.WriteString(line)
-		}
-	}
-	return sb.String()
 }

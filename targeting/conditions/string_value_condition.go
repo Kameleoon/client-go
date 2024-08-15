@@ -1,7 +1,7 @@
 package conditions
 
 import (
-	"fmt"
+	"github.com/Kameleoon/client-go/v3/logging"
 	"regexp"
 	"strings"
 
@@ -31,11 +31,11 @@ func (c *StringValueCondition) checkTargeting(value string) bool {
 		matched, err := regexp.MatchString(c.Value, value)
 		return err == nil && matched
 	default:
-		fmt.Printf("unexpected comparing operation for %v condition: %v\n", c.TargetingConditionBase.Type, c.MatchType)
+		logging.Error("Unexpected comparing operation for %s condition: %s", c.TargetingConditionBase.Type, c.MatchType)
 		return false
 	}
 }
 
-func (c *StringValueCondition) String() string {
+func (c StringValueCondition) String() string {
 	return utils.JsonToString(c)
 }

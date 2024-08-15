@@ -8,7 +8,7 @@ import (
 )
 
 type remoteVisitorData struct {
-	customDataDict        map[int]*types.CustomData
+	customDataDict        map[int]types.ICustomData
 	pageViewVisits        map[string]types.PageViewVisit
 	conversions           []*types.Conversion
 	experiments           map[int]*types.AssignedVariation
@@ -116,7 +116,7 @@ func (rvd *remoteVisitorData) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, m); err != nil {
 		return err
 	}
-	rvd.customDataDict = make(map[int]*types.CustomData)
+	rvd.customDataDict = make(map[int]types.ICustomData)
 	rvd.pageViewVisits = make(map[string]types.PageViewVisit)
 	rvd.conversions = []*types.Conversion{}
 	rvd.experiments = make(map[int]*types.AssignedVariation)

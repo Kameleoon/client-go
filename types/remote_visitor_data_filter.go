@@ -1,5 +1,7 @@
 package types
 
+import "fmt"
+
 type RemoteVisitorDataFilter struct {
 	PreviousVisitAmount int
 	CurrentVisit        bool
@@ -20,4 +22,22 @@ func DefaultRemoteVisitorDataFilter() RemoteVisitorDataFilter {
 		CurrentVisit:        true,
 		CustomData:          true,
 	}
+}
+
+func (r RemoteVisitorDataFilter) String() string {
+	return fmt.Sprintf(
+		"RemoteVisitorDataFilter{PreviousVisitAmount:%d,CurrentVisit:%t,CustomData:%t,PageViews:%t,"+
+			"Geolocation:%t,Device:%t,Browser:%t,OperatingSystem:%t,Conversions:%t,Experiments:%t,Kcs:%t}",
+		r.PreviousVisitAmount,
+		r.CurrentVisit,
+		r.CustomData,
+		r.PageViews,
+		r.Geolocation,
+		r.Device,
+		r.Browser,
+		r.OperatingSystem,
+		r.Conversion,
+		r.Experiments,
+		r.Kcs,
+	)
 }

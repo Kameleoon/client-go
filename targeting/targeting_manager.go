@@ -1,6 +1,8 @@
 package targeting
 
 import (
+	"github.com/Kameleoon/client-go/v3/logging"
+	"github.com/Kameleoon/client-go/v3/managers/data"
 	"github.com/Kameleoon/client-go/v3/storage"
 	"github.com/Kameleoon/client-go/v3/targeting/conditions"
 	"github.com/Kameleoon/client-go/v3/types"
@@ -8,35 +10,37 @@ import (
 )
 
 type TargetingManager interface {
-	SetDataFile(dataFile types.DataFile)
-	CheckTargeting(visitorCode string, campaignId int, expOrFForRule TargetingObjectInterface) bool
+	CheckTargeting(visitorCode string, campaignId int, expOrFForRule types.TargetingObject) bool
 }
 
 type targetingManager struct {
 	visitorManager storage.VisitorManager
-	dataFile       types.DataFile
+	dataManager    data.DataManager
 }
 
-func NewTargetingManager(visitorManager storage.VisitorManager) TargetingManager {
+func NewTargetingManager(dataManager data.DataManager, visitorManager storage.VisitorManager) TargetingManager {
 	return &targetingManager{
+		dataManager:    dataManager,
 		visitorManager: visitorManager,
 	}
-}
-
-func (tm *targetingManager) SetDataFile(dataFile types.DataFile) {
-	tm.dataFile = dataFile
 }
 
 func (tm *targetingManager) CheckTargeting(
 	visitorCode string,
 	campaignId int,
-	expOrFForRule TargetingObjectInterface,
+	expOrFForRule types.TargetingObject,
 ) bool {
+	logging.Debug("CALL: targetingManager.CheckTargeting(visitorCode: %s, campaignId: %s, expOrFForRule: %s)",
+		visitorCode, campaignId, expOrFForRule)
 	segment := expOrFForRule.GetTargetingSegment()
 	visitor := tm.visitorManager.GetVisitor(visitorCode)
-	return segment == nil || segment.CheckTargeting(func(targetingType types.TargetingType) interface{} {
+	targeted := segment == nil || segment.CheckTargeting(func(targetingType types.TargetingType) interface{} {
 		return tm.getConditionData(targetingType, visitor, visitorCode, campaignId)
 	})
+	logging.Debug(
+		"RETURN: targetingManager.CheckTargeting(visitorCode: %s, campaignId: %s, expOrFForRule: %s) -> (targeted: %s)",
+		visitorCode, campaignId, expOrFForRule, targeted)
+	return targeted
 }
 
 func (tm *targetingManager) getConditionData(
@@ -45,6 +49,9 @@ func (tm *targetingManager) getConditionData(
 	visitorCode string,
 	campaignId int,
 ) interface{} {
+	logging.Debug(
+		"CALL: targetingManager.getConditionData(targetingType: %s, visitor, visitorCode: %s, campaignId: %s)",
+		targetingType, visitorCode, campaignId)
 	var conditionData interface{}
 	switch targetingType {
 	case types.TargetingCustomDatum:
@@ -79,7 +86,7 @@ func (tm *targetingManager) getConditionData(
 		conditionData = &types.TargetedDataSdk{Language: utils.SdkName, Version: utils.SdkVersion}
 	case types.TargetingTargetFeatureFlag:
 		targetingDataTargetFeatureFlagCondition := conditions.TargetingDataTargetFeatureFlagCondition{
-			DataFile: tm.dataFile,
+			DataFile: tm.dataManager.DataFile(),
 		}
 		if visitor != nil {
 			targetingDataTargetFeatureFlagCondition.VariationStorage = visitor.Variations()
@@ -105,7 +112,7 @@ func (tm *targetingManager) getConditionData(
 		}
 	case types.TargetingSegment:
 		conditionData = conditions.TargetingDataSegmentCondition{
-			DataFile: tm.dataFile,
+			DataFile: tm.dataManager.DataFile(),
 			TargetingDataGetter: func(targetingType types.TargetingType) interface{} {
 				return tm.getConditionData(targetingType, visitor, visitorCode, campaignId)
 			},
@@ -129,5 +136,8 @@ func (tm *targetingManager) getConditionData(
 			conditionData = visitor.KcsHeat()
 		}
 	}
+	logging.Debug(
+		"RETURN: targetingManager.getConditionData(targetingType: %s, visitor, visitorCode: %s, campaignId: %s) "+
+			"-> (conditionData: %s)", targetingType, visitorCode, campaignId, conditionData)
 	return conditionData
 }

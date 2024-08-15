@@ -3,12 +3,17 @@ package configuration
 import (
 	"github.com/Kameleoon/client-go/v3/targeting"
 	"github.com/Kameleoon/client-go/v3/types"
+	"fmt"
 	"github.com/segmentio/encoding/json"
 )
 
 type Rule struct {
 	types.RuleBase
 	TargetingSegment *targeting.Segment `json:"-"`
+}
+
+func (r Rule) String() string {
+	return fmt.Sprintf("Rule{Id:%v}", r.Id)
 }
 
 func (r *Rule) UnmarshalJSON(data []byte) error {
@@ -51,7 +56,7 @@ func (r *Rule) GetVariation(id int) *types.VariationByExposition {
 	return nil
 }
 
-func (r *Rule) GetTargetingSegment() *targeting.Segment {
+func (r *Rule) GetTargetingSegment() types.Segment {
 	return r.TargetingSegment
 }
 
@@ -65,8 +70,4 @@ func (r *Rule) IsTargetDeliveryType() bool {
 
 func (r *Rule) GetRuleBase() *types.RuleBase {
 	return &r.RuleBase
-}
-
-func (r *Rule) GetSegment() types.Segment {
-	return r.TargetingSegment
 }

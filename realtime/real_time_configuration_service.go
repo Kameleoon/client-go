@@ -15,18 +15,16 @@ type RealTimeConfigurationService struct {
 	url         string
 	updateChan  chan RealTimeEvent
 	sse         SseClient
-	logger      logging.Logger
 	closeFlag   bool
 	closeChan   chan bool
 }
 
-func NewRealTimeConfigurationService(url string, updateChan chan RealTimeEvent, sse SseClient,
-	logger logging.Logger) *RealTimeConfigurationService {
+func NewRealTimeConfigurationService(url string, updateChan chan RealTimeEvent,
+	sse SseClient) *RealTimeConfigurationService {
 	rtcs := &RealTimeConfigurationService{
 		url:        url,
 		updateChan: updateChan,
 		sse:        sse,
-		logger:     logger,
 		closeChan:  make(chan bool, 1),
 	}
 	go rtcs.run()
@@ -44,39 +42,43 @@ func (rtcs *RealTimeConfigurationService) Close() {
 }
 
 func (rtcs *RealTimeConfigurationService) run() {
-	rtcs.log("Real-Time Configuration Service started")
+	logging.Info("Real-Time Configuration Service started")
+	if rtcs.sse == nil {
+		logging.Error("SSE Client is not provided, Real-time Configuration Service is not started")
+		return
+	}
 	for !rtcs.closeFlag {
-		rtcs.sse.Dispose(rtcs.log)
+		rtcs.sse.Dispose()
 		if err := rtcs.sse.Init(rtcs.url); err != nil {
-			rtcs.log("Failed to open SSE connection: %v", err)
+			logging.Error("Failed to open SSE connection: %s", err)
 			continue
 		}
-		rtcs.log("SSE connection open")
+		logging.Info("SSE connection open")
 		for halt := false; !halt; {
 			select {
 			case halt = <-rtcs.closeChan:
 			case err := <-rtcs.sse.GetErrorChan():
-				rtcs.log("Error occurred within SSE client: %v", err)
+				logging.Error("Error occurred within SSE client: %s", err)
 				halt = true
 			default:
 				select {
 				case halt = <-rtcs.closeChan:
 				case err := <-rtcs.sse.GetErrorChan():
 					halt = true
-					rtcs.log("Error occurred within SSE client: %v", err)
+					logging.Error("Error occurred within SSE client: %s", err)
 				case evt := <-rtcs.sse.GetEventChan():
-					rtcs.log("Got '%s' SSE event", configurationUpdateEvent)
+					logging.Info("Got %s SSE event", configurationUpdateEvent)
 					if err := rtcs.handleEvent(evt); err != nil {
-						rtcs.log("Error occurred during SSE event parsing: %v", err)
+						logging.Error("Error occurred during SSE event parsing: %s", err)
 					}
 				}
 			}
 		}
-		rtcs.log("SSE connection closed")
+		logging.Info("SSE connection closed")
 	}
 	close(rtcs.updateChan)
-	rtcs.sse.Dispose(rtcs.log)
-	rtcs.log("Real-Time Configuration Service stopped")
+	rtcs.sse.Dispose()
+	logging.Info("Real-Time Configuration Service stopped")
 }
 
 func (rtcs *RealTimeConfigurationService) handleEvent(evt net.Event) error {
@@ -87,10 +89,4 @@ func (rtcs *RealTimeConfigurationService) handleEvent(evt net.Event) error {
 	}
 	rtcs.updateChan <- rtEvent
 	return nil
-}
-
-func (rtcs *RealTimeConfigurationService) log(format string, args ...interface{}) {
-	if rtcs.logger != nil {
-		rtcs.logger.Printf(format, args...)
-	}
 }

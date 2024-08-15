@@ -37,6 +37,16 @@ func NewAssignedVariationWithTime(
 	}
 }
 
+func (av AssignedVariation) String() string {
+	return fmt.Sprintf(
+		"AssignedVariation{experimentId:%v,variationId:%v,assignmentTime:%v,ruleType:%v}",
+		av.experimentId,
+		av.variationId,
+		av.assignmentTime,
+		av.ruleType,
+	)
+}
+
 func (av *AssignedVariation) ExperimentId() int {
 	return av.experimentId
 }

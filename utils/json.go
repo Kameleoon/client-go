@@ -1,8 +1,8 @@
 package utils
 
 import (
+	"github.com/Kameleoon/client-go/v3/logging"
 	"encoding/json"
-	"fmt"
 	"strings"
 )
 
@@ -12,7 +12,7 @@ func JsonToString(o interface{}) string {
 	}
 	b, err := json.Marshal(o)
 	if err != nil {
-		fmt.Printf("condition can't be parsed to JSON: %v\n", o)
+		logging.Error("Condition can't be parsed to JSON: %s", o)
 		return ""
 	}
 	var s strings.Builder

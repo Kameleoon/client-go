@@ -2,6 +2,8 @@ package network
 
 import (
 	"crypto/tls"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -31,11 +33,22 @@ type Request struct {
 	Url            string            // mandatory
 	ContentType    ContentType       // optional ("")
 	Timeout        time.Duration     // mandatory
-	UserAgent      string            // optional ("")
 	Data           string            // optional ("")
 	Headers        map[string]string // optional
 	AccessToken    string            // optional ("")
 	IsAuthRequired bool              // optional (false)
+}
+
+func (r Request) String() string {
+	body := "nil"
+	if r.Data != "" {
+		if strings.HasPrefix(r.Data, "client_id=") {
+			body = "****"
+		} else {
+			body = r.Data
+		}
+	}
+	return fmt.Sprintf("HttpRequest{Method:'%s',Url:'%s',Headers:%v,Body:'%s'}", r.Method, r.Url, r.Headers, body)
 }
 
 // response
@@ -45,6 +58,14 @@ type Response struct {
 	Code    int      // optional (0)
 	Body    []byte   // optional ([])
 	Request *Request // mandatory
+}
+
+func (r Response) IsExpectedStatusCode() bool {
+	return (r.Code/100 == 2) || (r.Code == 403)
+}
+
+func (r Response) String() string {
+	return fmt.Sprintf("HttpResponse{Code:'%d',Reason:'%v',Body:'%s'}", r.Code, r.Err, string(r.Body))
 }
 
 // declaration
@@ -103,9 +124,6 @@ func (np *NetProviderImpl) Call(request *Request) Response {
 }
 
 func (np *NetProviderImpl) setHeaders(req *fasthttp.Request, request *Request) {
-	if len(request.UserAgent) > 0 {
-		req.Header.SetUserAgent(request.UserAgent)
-	}
 	if len(request.Headers) > 0 {
 		for key, value := range request.Headers {
 			req.Header.Set(key, value)

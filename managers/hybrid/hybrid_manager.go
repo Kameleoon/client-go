@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Kameleoon/client-go/v3/logging"
+
 	"github.com/Kameleoon/client-go/v3/storage"
 	"github.com/Kameleoon/client-go/v3/types"
 )
@@ -27,17 +29,25 @@ type HybridManagerImpl struct {
 }
 
 func NewHybridManagerImpl(expirationTime time.Duration) (*HybridManagerImpl, error) {
+	logging.Debug("CALL: NewHybridManagerImpl(expirationTime: %s)", expirationTime)
+	var err error
+	var hybridManagerImpl *HybridManagerImpl
 	if expirationTime <= 0 {
-		return nil, errors.New("'expirationTime' must be a postitive value")
+		err = errors.New("'expirationTime' must be a postitive value")
+		logging.Error("HybridManager isn't initialized properly, "+
+			"GetEngineTrackingCode method isn't available for call. error %s", err)
+	} else {
+		hybridManagerImpl = &HybridManagerImpl{expirationTime: expirationTime}
 	}
-	return &HybridManagerImpl{
-		expirationTime: expirationTime,
-	}, nil
+	logging.Debug("RETURN: NewHybridManagerImpl(expirationTime: %s) -> (hybridManagerImpl, error: %s)",
+		expirationTime, err)
+	return hybridManagerImpl, err
 }
 
 func (hm *HybridManagerImpl) GetEngineTrackingCode(
 	variations storage.DataMapStorage[int, *types.AssignedVariation],
 ) string {
+	logging.Debug("CALL: HybridManagerImpl.GetEngineTrackingCode(variations: %s)", variations)
 	var trackingCode strings.Builder
 	trackingCode.WriteString(tcInit)
 	if variations != nil {
@@ -50,5 +60,8 @@ func (hm *HybridManagerImpl) GetEngineTrackingCode(
 			return true
 		})
 	}
-	return trackingCode.String()
+	trackingCodeString := trackingCode.String()
+	logging.Debug("RETURN: HybridManagerImpl.GetEngineTrackingCode(variations: %s) -> (trackingCode: %s)",
+		variations, trackingCodeString)
+	return trackingCodeString
 }

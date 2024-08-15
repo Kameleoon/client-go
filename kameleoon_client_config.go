@@ -10,26 +10,32 @@ import (
 )
 
 const (
-	DefaultConfigPath      = "/etc/kameleoon/client-go.yaml"
-	DefaultRefreshInterval = time.Hour
-	DefaultRequestTimeout  = 10 * time.Second
-	DefaultSessionDuration = 30 * time.Minute
-	DefaultEnvironment     = ""
+	DefaultConfigPath       = "/etc/kameleoon/client-go.yaml"
+	DefaultRefreshInterval  = time.Hour
+	DefaultRequestTimeout   = 10 * time.Second
+	DefaultSessionDuration  = 30 * time.Minute
+	DefaultEnvironment      = ""
+	DefaultTrackingInterval = time.Second
+	MinTrackingInterval     = time.Millisecond * 100
+	MaxTrackingInterval     = time.Second
 )
 
+// Field Logger is DEPRECATED. Please use `logging.SetLogger(logging.Logger)` instead.
+// Field VerboseMode is DEPRECATED. Please use `logging.SetLogLevel(logging.LogLevel)` instead.
 type KameleoonClientConfig struct {
-	defaultsApplied bool
-	Network         NetworkConfig
-	Logger          logging.Logger `yml:"-" yaml:"-"`
-	ProxyURL        string         `yml:"proxy_url" yaml:"proxy_url"`
-	ClientID        string         `yml:"client_id" yaml:"client_id"`
-	ClientSecret    string         `yml:"client_secret" yaml:"client_secret"`
-	RefreshInterval time.Duration  `yml:"refresh_interval" yaml:"refresh_interval" default:"1h"`
-	DefaultTimeout  time.Duration  `yml:"default_timeout" yaml:"default_timeout" default:"10s"`
-	VerboseMode     bool           `yml:"verbose_mode" yaml:"verbose_mode"`
-	SessionDuration time.Duration  `yml:"session_duration" yaml:"session_duration" default:"30m"`
-	TopLevelDomain  string         `yml:"top_level_domain" yaml:"top_level_domain"`
-	Environment     string         `yml:"environment" yaml:"environment"`
+	defaultsApplied  bool
+	Network          NetworkConfig
+	Logger           logging.Logger `yml:"-" yaml:"-"`
+	ProxyURL         string         `yml:"proxy_url" yaml:"proxy_url"`
+	ClientID         string         `yml:"client_id" yaml:"client_id"`
+	ClientSecret     string         `yml:"client_secret" yaml:"client_secret"`
+	RefreshInterval  time.Duration  `yml:"refresh_interval" yaml:"refresh_interval" default:"1h"`
+	DefaultTimeout   time.Duration  `yml:"default_timeout" yaml:"default_timeout" default:"10s"`
+	TrackingInterval time.Duration  `yml:"tracking_interval" yaml:"tracking_interval" default:"1s"`
+	VerboseMode      bool           `yml:"verbose_mode" yaml:"verbose_mode"`
+	SessionDuration  time.Duration  `yml:"session_duration" yaml:"session_duration" default:"30m"`
+	TopLevelDomain   string         `yml:"top_level_domain" yaml:"top_level_domain"`
+	Environment      string         `yml:"environment" yaml:"environment"`
 }
 
 func LoadConfig(path string) (*KameleoonClientConfig, error) {
@@ -50,32 +56,40 @@ func (c *KameleoonClientConfig) defaults() error {
 		return errs.NewConfigCredentialsInvalid("Client secret is not specified")
 	}
 
-	if c.Logger == nil {
-		c.defaultLogger()
-	}
 	if c.RefreshInterval < time.Minute {
 		if c.RefreshInterval != 0 {
-			c.Logger.Printf("Kameleoon SDK: Config update interval must not be less than a minute."+
-				"Default config update interval (%d minutes) is applied", int(DefaultRefreshInterval.Minutes()))
+			logging.Warning("Config update interval must not be less than a minute."+
+				"Default config update interval (%s minutes) was applied", int(DefaultRefreshInterval.Minutes()))
 		}
 		c.RefreshInterval = DefaultRefreshInterval
 	}
 	if c.DefaultTimeout <= 0 {
 		if c.DefaultTimeout != 0 {
-			c.Logger.Printf("Kameleoon SDK: Default timeout must have positive value."+
-				"Default default timeout (%d ms) is applied", DefaultRequestTimeout.Milliseconds())
+			logging.Warning("Default timeout must have positive value."+
+				"Default default timeout (%s ms) was applied", DefaultRequestTimeout.Milliseconds())
 		}
 		c.DefaultTimeout = DefaultRequestTimeout
 	}
+	if c.TrackingInterval == 0 {
+		c.TrackingInterval = DefaultTrackingInterval
+	} else if c.TrackingInterval < MinTrackingInterval {
+		logging.Warning("Tracking interval must not be shorter than %d ms. Minimum possible interval was applied.",
+			MinTrackingInterval.Milliseconds())
+		c.TrackingInterval = MinTrackingInterval
+	} else if c.TrackingInterval > MaxTrackingInterval {
+		logging.Warning("Tracking interval must not be longer than %d ms. Maximum possible interval was applied.",
+			MaxTrackingInterval.Milliseconds())
+		c.TrackingInterval = MaxTrackingInterval
+	}
 	if c.SessionDuration <= 0 {
 		if c.SessionDuration != 0 {
-			c.Logger.Printf("Kameleoon SDK: Session duration must have positive value."+
-				"Default session duration (%d minutes) is applied", int(DefaultSessionDuration.Minutes()))
+			logging.Warning("Session duration must have positive value."+
+				"Default session duration (%d minutes) was applied", int(DefaultSessionDuration.Minutes()))
 		}
 		c.SessionDuration = DefaultSessionDuration
 	}
 	if len(c.TopLevelDomain) == 0 {
-		c.Logger.Printf("Kameleoon SDK: Setting top level domain is strictly recommended, " +
+		logging.Warning("Setting top level domain is strictly recommended, " +
 			"otherwise you may have problems when using subdomains.")
 	}
 	if len(c.Environment) == 0 {
@@ -84,22 +98,19 @@ func (c *KameleoonClientConfig) defaults() error {
 	return c.Network.defaults()
 }
 
-func (c *KameleoonClientConfig) defaultLogger() {
-	loggerMode := logging.Silent
-	if c.VerboseMode {
-		loggerMode = logging.Verbose
-	}
-	c.Logger = logging.NewLogger(loggerMode, logging.DefaultLogger)
-}
-
 func (c *KameleoonClientConfig) Load(path string) error {
+	logging.Info("CALL: KameleoonClientConfig.Load(path: %s)", path)
 	if len(path) == 0 {
 		path = DefaultConfigPath
 	}
-	if err := c.loadFile(path); err != nil {
-		return err
+	err := c.loadFile(path)
+	if err != nil {
+		logging.Error("Failed to load configuration from file %s", path)
+	} else {
+		err = c.defaults()
 	}
-	return c.defaults()
+	logging.Info("RETURN: KameleoonClientConfig.Load(path: %s) -> (error: %s)", path, err)
+	return err
 }
 
 func (c *KameleoonClientConfig) loadFile(configPath string) error {

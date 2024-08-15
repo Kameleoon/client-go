@@ -2,7 +2,6 @@ package network
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/Kameleoon/client-go/v3/errs"
@@ -16,7 +15,6 @@ const (
 	NetworkCallAttemptsNumberUncritical = 1
 
 	codeUnauthorized = 401
-	codeForbidden    = 403
 )
 
 // declaration
@@ -38,8 +36,7 @@ type NetworkManager interface {
 	GetRemoteData(key string, timeout time.Duration) (json.RawMessage, error)
 	GetRemoteVisitorData(visitorCode string, filter types.RemoteVisitorDataFilter, isUniqueIdentifier bool,
 		timeout time.Duration) (json.RawMessage, error)
-	SendTrackingData(visitorCode string, lines []types.Sendable, userAgent string,
-		isUniqueIdentifier bool) (bool, error)
+	SendTrackingData(trackingLines string) (bool, error)
 }
 
 // base implementation
@@ -60,17 +57,15 @@ func NewNetworkManagerImpl(
 	netProvider NetProvider,
 	urlProvider UrlProvider,
 	accessTokenSourceFactory AccessTokenSourceFactory,
-	logger logging.Logger,
 ) *NetworkManagerImpl {
 	nm := &NetworkManagerImpl{
 		Environment:            environment,
 		DefaultTimeout:         defaultTimeout,
 		NetProvider:            netProvider,
 		UrlProvider:            urlProvider,
-		Logger:                 logger,
 		TrackingCallRetryDelay: DefaultTrackingCallRetryDelay,
 	}
-	nm.accessTokenSource = accessTokenSourceFactory.create(nm, logger)
+	nm.accessTokenSource = accessTokenSourceFactory.create(nm)
 	return nm
 }
 
@@ -103,7 +98,7 @@ func (nm *NetworkManagerImpl) ensureTimeout(request *Request) {
 }
 
 func (nm *NetworkManagerImpl) makeCall(request *Request, attemptCount int, retryDelay time.Duration) ([]byte, error) {
-
+	logging.Debug("Running request %s with retry limit %s, retry delay %s ms", request, attemptCount, retryDelay)
 	nm.ensureTimeout(request)
 	var err error
 	var isTokenRejected bool
@@ -114,16 +109,20 @@ func (nm *NetworkManagerImpl) makeCall(request *Request, attemptCount int, retry
 		nm.authorizeIfRequired(request)
 		response := nm.NetProvider.Call(request)
 		if isTokenRejected, err = nm.processErrors(request, &response); err == nil {
+			logging.Debug("Fetched response %s for request %s", response, request)
 			return response.Body, nil
 		}
 	}
 	if isTokenRejected {
+		logging.Error("Wrong Kameleoon API access token slows down the SDK's requests")
 		request.AccessToken = ""
 		response := nm.NetProvider.Call(request)
 		if _, err = nm.processErrors(request, &response); err == nil {
+			logging.Debug("Fetched response %s for request %s", response, request)
 			return response.Body, nil
 		}
 	}
+	logging.Error("Failed %s request %s", request.Method, request.Url)
 	return nil, err
 }
 
@@ -139,10 +138,11 @@ func (nm *NetworkManagerImpl) processErrors(request *Request, response *Response
 	if response.Err != nil {
 		err = response.Err
 		nm.logErrOccurred(request, response.Err)
-	} else if response.Code/100 != 2 {
+	} else if !response.IsExpectedStatusCode() {
 		err = errs.NewUnexpectedStatusCode(response.Code)
 		nm.logUnexpectedCode(request, response.Code)
-		if (response.Code == codeUnauthorized || response.Code == codeForbidden) && request.AccessToken != "" {
+		if (response.Code == codeUnauthorized) && (request.AccessToken != "") {
+			logging.Warning("Unexpected rejection of access token %s", request.AccessToken)
 			nm.accessTokenSource.DiscardToken(request.AccessToken)
 			isTokenRejected = true
 		}
@@ -151,15 +151,8 @@ func (nm *NetworkManagerImpl) processErrors(request *Request, response *Response
 }
 
 func (nm *NetworkManagerImpl) logErrOccurred(request *Request, err error) {
-	nm.Logger.Printf("%s: Error occurred during request: %v", makeErrMsg(request), err)
+	logging.Warning("%s: Error occurred during request: %s", request, err)
 }
 func (nm *NetworkManagerImpl) logUnexpectedCode(request *Request, code int) {
-	nm.Logger.Printf("%s: Received unexpected status code '%d'", makeErrMsg(request), code)
-}
-
-func makeErrMsg(request *Request) string {
-	if len(request.Data) == 0 {
-		return fmt.Sprintf("%s call '%s' failed", request.Method, request.Url)
-	}
-	return fmt.Sprintf("%s call '%s' (data '%s') failed", request.Method, request.Url, request.Data)
+	logging.Warning("%s: Received unexpected status code %s", request, code)
 }

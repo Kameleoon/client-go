@@ -92,7 +92,7 @@ func (c *TargetingCondition) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, (*targetingCondition)(c))
 }
 
-func (c *TargetingConditionBase) String() string {
+func (c TargetingConditionBase) String() string {
 	var s strings.Builder
 	b, _ := json.Marshal(c)
 	s.Write(b)

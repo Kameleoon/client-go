@@ -23,7 +23,7 @@ const (
 )
 
 type UrlProvider interface {
-	MakeTrackingUrl(visitorCode string, isUniqueIdentifier bool) string
+	MakeTrackingUrl() string
 	MakeVisitorDataGetUrl(visitorCode string, filter types.RemoteVisitorDataFilter, isUniqueIdentifier bool) string
 	MakeApiDataGetRequestUrl(key string) string
 	MakeConfigurationUrl(environment string, ts int64) string
@@ -77,12 +77,12 @@ func getUserIdQP(isUniqueIdentifier bool) string {
 	return utils.QPVisitorCode
 }
 
-func (up *UrlProviderImpl) MakeTrackingUrl(visitorCode string, isUniqueIdentifier bool) string {
+func (up *UrlProviderImpl) MakeTrackingUrl() string {
 	qb := utils.NewQueryBuilder()
 	qb.Append(utils.QPSdkName, up.sdkName)
 	qb.Append(utils.QPSdkVersion, up.sdkVersion)
 	qb.Append(utils.QPSiteCode, up.siteCode)
-	qb.Append(getUserIdQP(isUniqueIdentifier), visitorCode)
+	qb.Append(utils.QPBodyUA, "true")
 	return fmt.Sprintf("https://%s%s?%s", up.dataApiDomain, trackingPath, qb.String())
 }
 

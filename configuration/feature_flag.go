@@ -1,7 +1,9 @@
 package configuration
 
 import (
+	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/types"
+	"fmt"
 )
 
 type FeatureFlag struct {
@@ -13,16 +15,28 @@ type FeatureFlag struct {
 	Rules               []Rule                       `json:"rules"`
 }
 
-func (ff *FeatureFlag) GetVariationByKey(key string) (*types.VariationFeatureFlag, bool) {
-	for _, v := range ff.Variations {
-		if v.Key == key {
-			return &v, true
-		}
-	}
-	return nil, false
+func (ff FeatureFlag) String() string {
+	return fmt.Sprintf("FeatureFlag{Id:%v,FeatureKey:'%v',EnvironmentEnabled:%v,DefaultVariationKey:'%v',Rules:%v}",
+		ff.Id, ff.FeatureKey, ff.EnvironmentEnabled, ff.DefaultVariationKey, len(ff.Rules))
 }
 
-func (ff *FeatureFlag) GetVariationKey(varByExp *types.VariationByExposition, rule *Rule) string {
+func (ff *FeatureFlag) GetVariationByKey(key string) (*types.VariationFeatureFlag, bool) {
+	logging.Debug("CALL: FeatureFlag.GetVariationByKey(key: %s)", key)
+	var variation *types.VariationFeatureFlag
+	exist := false
+	for _, v := range ff.Variations {
+		if v.Key == key {
+			variation = &v
+			exist = true
+			break
+		}
+	}
+	logging.Debug("RETURN: FeatureFlag.GetVariationByKey(key: %s) -> (variation: %s, exist: %s)",
+		key, variation, exist)
+	return variation, exist
+}
+
+func (ff *FeatureFlag) GetVariationKey(varByExp *types.VariationByExposition, rule types.Rule) string {
 	if varByExp != nil {
 		return varByExp.VariationKey
 	} else if rule != nil && rule.IsExperimentType() {

@@ -1,8 +1,7 @@
 package conditions
 
 import (
-	"fmt"
-
+	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/types"
 	"github.com/Kameleoon/client-go/v3/utils"
 )
@@ -43,13 +42,13 @@ func (c *SdkLanguageCondition) checkTargeting(sdkInfo *types.TargetedDataSdk) bo
 	// get major / minor / patch sdk version from condition
 	majorCondition, minorCondition, patchCondition, err := GetMajorMinorPatch(c.Version)
 	if err != nil {
-		fmt.Println(err)
+		logging.Error("Failed to parse version %s for 'SdkLanguage' condition: %s", c.Version, err)
 		return false
 	}
 	// get major / minor / patch sdk version from targeted data (provided by SDK)
 	majorSdk, minorSdk, patchSdk, err := GetMajorMinorPatch(sdkInfo.Version)
 	if err != nil {
-		fmt.Println(err)
+		logging.Error("Failed to parse version %s for sdkInfo in 'SdkLanguage' condition: %s", sdkInfo.Version, err)
 		return false
 	}
 
@@ -65,11 +64,11 @@ func (c *SdkLanguageCondition) checkTargeting(sdkInfo *types.TargetedDataSdk) bo
 			(majorSdk == majorCondition && minorSdk < minorCondition) ||
 			(majorSdk == majorCondition && minorSdk == minorCondition && patchSdk < patchCondition)
 	default:
-		fmt.Printf("unexpected comparing operation for SdkLanguage condition: %v\n", c.VersionMatchType)
+		logging.Error("Unexpected comparing operation for 'SdkLanguage' condition: %s", c.VersionMatchType)
 		return false
 	}
 }
 
-func (c *SdkLanguageCondition) String() string {
+func (c SdkLanguageCondition) String() string {
 	return utils.JsonToString(c)
 }

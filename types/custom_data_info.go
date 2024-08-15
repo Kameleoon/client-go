@@ -1,8 +1,8 @@
 package types
 
 import (
+	"github.com/Kameleoon/client-go/v3/logging"
 	"encoding/json"
-	"fmt"
 )
 
 const scopeVisitor = "VISITOR"
@@ -44,7 +44,7 @@ func (cdi *CustomDataInfo) UnmarshalJSON(data []byte) error {
 		}
 		if cd.IsMappingIdentifier {
 			if cdi.mappingIdentifierIndex != undefinedIndex {
-				fmt.Printf("Kameleoon SDK: More than one mapping identifier is set. " +
+				logging.Warning("More than one mapping identifier is set. " +
 					"Undefined behavior may occur on cross-device reconciliation.")
 			}
 			cdi.mappingIdentifierIndex = cd.Index

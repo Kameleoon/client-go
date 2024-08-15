@@ -1,6 +1,11 @@
 package storage
 
-import "sync"
+import (
+	"github.com/Kameleoon/client-go/v3/logging"
+	"fmt"
+	"strings"
+	"sync"
+)
 
 type DataCollectionStorage[V any] interface {
 	Enumerate(f func(V) bool)
@@ -19,21 +24,30 @@ func enumerateSlice[V any](s []V, f func(V) bool) bool {
 
 type DataCollectionStorageImpl[V any] struct {
 	mx   *sync.RWMutex
-	data []V
+	data *[]V
 }
 
-func NewDataCollectionStorageImpl[V any](mx *sync.RWMutex, data []V) *DataCollectionStorageImpl[V] {
+func NewDataCollectionStorageImpl[V any](mx *sync.RWMutex, data *[]V) *DataCollectionStorageImpl[V] {
 	return &DataCollectionStorageImpl[V]{
 		mx:   mx,
 		data: data,
 	}
 }
 
+func (s DataCollectionStorageImpl[V]) String() string {
+	var values []string
+	s.Enumerate(func(v V) bool {
+		values = append(values, logging.ObjectToString(v))
+		return true
+	})
+	return fmt.Sprintf("DataCollectionStorageImpl{values:%s}", strings.Join(values, ","))
+}
+
 func (s *DataCollectionStorageImpl[V]) Enumerate(f func(V) bool) {
 	if s.data != nil {
 		s.mx.RLock()
 		defer s.mx.RUnlock()
-		enumerateSlice[V](s.data, f)
+		enumerateSlice[V](*s.data, f)
 	}
 }
 
@@ -41,9 +55,10 @@ func (s *DataCollectionStorageImpl[V]) Last() V {
 	if s.data != nil {
 		s.mx.RLock()
 		defer s.mx.RUnlock()
-		i := len(s.data) - 1
+		data := *s.data
+		i := len(data) - 1
 		if i >= 0 {
-			return s.data[i]
+			return data[i]
 		}
 	}
 	var defaultV V
@@ -54,7 +69,7 @@ func (s *DataCollectionStorageImpl[V]) Len() int {
 	if s.data != nil {
 		s.mx.RLock()
 		defer s.mx.RUnlock()
-		return len(s.data)
+		return len(*s.data)
 	}
 	return 0
 }

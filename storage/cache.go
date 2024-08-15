@@ -2,6 +2,7 @@ package storage
 
 import (
 	"container/list"
+	"github.com/Kameleoon/client-go/v3/logging"
 	"sync"
 	"time"
 )
@@ -50,14 +51,21 @@ type CacheImpl struct {
 }
 
 func NewCache(expirationTime time.Duration, autoDelete bool) (*CacheImpl, error) {
+	logging.Debug("CALL: NewCache(expirationTime: %s, autoDelete: %s)", expirationTime, autoDelete)
+	var err error
+	var cache *CacheImpl
 	if expirationTime <= 0 {
-		return nil, &ErrCacheExpirationTime{}
+		err = &ErrCacheExpirationTime{}
+	} else {
+		cache = &CacheImpl{
+			list:           list.New(),
+			values:         make(map[interface{}]*list.Element),
+			expirationTime: expirationTime,
+			autoDelete:     autoDelete}
 	}
-	return &CacheImpl{
-		list:           list.New(),
-		values:         make(map[interface{}]*list.Element),
-		expirationTime: expirationTime,
-		autoDelete:     autoDelete}, nil
+	logging.Debug("RETURN: NewCache(expirationTime: %s, autoDelete: %s) -> (cache, error: %s)",
+		expirationTime, autoDelete, err)
+	return cache, err
 }
 
 // expiration parameter overwrites the default cache expiration time

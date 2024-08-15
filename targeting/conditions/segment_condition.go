@@ -29,14 +29,14 @@ func (c *SegmentCondition) CheckTargeting(targetData interface{}) bool {
 	if rule == nil {
 		return false
 	}
-	segment := rule.GetSegment()
+	segment := rule.GetTargetingSegment()
 	if segment == nil {
 		return false
 	}
 	return segment.CheckTargeting(targetingData.TargetingDataGetter)
 }
 
-func (c *SegmentCondition) String() string {
+func (c SegmentCondition) String() string {
 	return utils.JsonToString(c)
 }
 

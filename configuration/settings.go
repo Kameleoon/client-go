@@ -1,6 +1,9 @@
 package configuration
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 const consentTypeRequired = "REQUIRED"
 
@@ -8,6 +11,11 @@ type Settings struct {
 	realTimeUpdate    bool
 	isConsentRequired bool
 	dataApiDomain     string
+}
+
+func (s Settings) String() string {
+	return fmt.Sprintf("Settings{realTimeUpdate:%v,isConsentRequired:%v,dataApiDomain:'%v'}",
+		s.realTimeUpdate, s.isConsentRequired, s.dataApiDomain)
 }
 
 func (s *Settings) UnmarshalJSON(data []byte) error {

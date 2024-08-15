@@ -1,6 +1,10 @@
 package types
 
 type Rule interface {
+	TargetingObject
+	GetVariationByHash(hashDouble float64) *VariationByExposition
+	IsExperimentType() bool
+	IsTargetDeliveryType() bool
 	GetRuleBase() *RuleBase
-	GetSegment() Segment
+	GetTargetingSegment() Segment
 }
