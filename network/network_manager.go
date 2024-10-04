@@ -122,7 +122,7 @@ func (nm *NetworkManagerImpl) makeCall(request *Request, attemptCount int, retry
 			return response.Body, nil
 		}
 	}
-	logging.Error("Failed %s request %s", request.Method, request.Url)
+	logging.Error("%s call '%s' failed: %s", request.Method, request.Url, err)
 	return nil, err
 }
 
@@ -137,10 +137,12 @@ func (nm *NetworkManagerImpl) processErrors(request *Request, response *Response
 	var isTokenRejected bool
 	if response.Err != nil {
 		err = response.Err
-		nm.logErrOccurred(request, response.Err)
+		logging.Warning("%s call '%s' failed: Error occurred during request: %s",
+			request.Method, request.Url, err)
 	} else if !response.IsExpectedStatusCode() {
 		err = errs.NewUnexpectedStatusCode(response.Code)
-		nm.logUnexpectedCode(request, response.Code)
+		logging.Warning("%s call '%s' failed: Received unexpected status code %s",
+			request.Method, request.Url, response.Code)
 		if (response.Code == codeUnauthorized) && (request.AccessToken != "") {
 			logging.Warning("Unexpected rejection of access token %s", request.AccessToken)
 			nm.accessTokenSource.DiscardToken(request.AccessToken)
@@ -148,11 +150,4 @@ func (nm *NetworkManagerImpl) processErrors(request *Request, response *Response
 		}
 	}
 	return isTokenRejected, err
-}
-
-func (nm *NetworkManagerImpl) logErrOccurred(request *Request, err error) {
-	logging.Warning("%s: Error occurred during request: %s", request, err)
-}
-func (nm *NetworkManagerImpl) logUnexpectedCode(request *Request, code int) {
-	logging.Warning("%s: Received unexpected status code %s", request, code)
 }

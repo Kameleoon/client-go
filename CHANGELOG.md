@@ -1,6 +1,22 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.5.0 - 2024-10-04
+### Features
+* Introduced new evaluation methods for clarity and improved efficiency when working with the SDK:
+  - [`GetVariation`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getvariation)
+  - [`GetVariations`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getvariations)
+* These methods replace the deprecated ones:
+  - [`GetFeatureVariationKey`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getfeaturevariationkey)
+  - [`GetFeatureVariable`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getfeaturevariable)
+  - [`GetActiveFeatures`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getactivefeatures)
+  - [`GetFeatureVariationVariables`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getfeaturevariationvariables)
+* A new method [`IsFeatureActiveWithTracking`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#isfeatureactive--isfeatureactivewithtracking) includes the `track` parameter, which controls whether the assigned variation is tracked.
+* Enhanced top-level domain validation within the SDK. The implementation now includes automatic trimming of extraneous symbols and provides a [warning](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#log-levels) when an invalid domain is detected.
+* Enhanced the [`GetEngineTrackingCode`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getenginetrackingcode) method to properly handle `JS` and `CSS` variables.
+### Bug fixes
+* Fixed returning the error when creating a new client was unsuccessful
+
 ## 3.4.0 - 2024-08-15
 ### Features
 * Improved the tracking mechanism to consolidate multiple visitors into a single request. The new approach combines information on all affected visitors into one request, which is sent once per interval.

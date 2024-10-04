@@ -6,7 +6,7 @@ import (
 
 type DataManager interface {
 	DataFile() types.DataFile
-	IsConsentRequired() bool
+	IsVisitorCodeManaged() bool
 
 	SetDataFile(dataFile types.DataFile)
 }
@@ -25,8 +25,8 @@ func (dm *DataManagerImpl) DataFile() types.DataFile {
 	return dm.container.dataFile
 }
 
-func (dm *DataManagerImpl) IsConsentRequired() bool {
-	return dm.container.isConsentRequired
+func (dm *DataManagerImpl) IsVisitorCodeManaged() bool {
+	return dm.container.isVisitorCodeManaged
 }
 
 func (dm *DataManagerImpl) SetDataFile(dataFile types.DataFile) {
@@ -34,13 +34,13 @@ func (dm *DataManagerImpl) SetDataFile(dataFile types.DataFile) {
 }
 
 type dataContainer struct {
-	dataFile          types.DataFile
-	isConsentRequired bool
+	dataFile             types.DataFile
+	isVisitorCodeManaged bool
 }
 
 func newDataContainer(dataFile types.DataFile) *dataContainer {
 	return &dataContainer{
-		dataFile:          dataFile,
-		isConsentRequired: dataFile.Settings().IsConsentRequired() && !dataFile.HasAnyTargetedDeliveryRule(),
+		dataFile:             dataFile,
+		isVisitorCodeManaged: dataFile.Settings().IsConsentRequired() && !dataFile.HasAnyTargetedDeliveryRule(),
 	}
 }

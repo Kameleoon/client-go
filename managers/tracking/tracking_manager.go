@@ -122,12 +122,13 @@ func (tm *TrackingManagerImpl) performTrackingRequest(
 	go func() {
 		out, err := tm.networkManager.SendTrackingData(lines)
 		if (err == nil) && out {
-			logging.Debug("Successful request for tracking visitors: %s, data: %s", visitorCodes, unsentVisitorData)
+			logging.Info("Successful request for tracking visitors: %s, data: %s", visitorCodes, unsentVisitorData)
 			for _, s := range unsentVisitorData {
 				s.MarkAsSent()
 			}
 		} else {
-			logging.Debug("Failed request for tracking visitors: %s, data: %s", visitorCodes, unsentVisitorData)
+			logging.Error("Tracking request failed: %s", err)
+			logging.Info("Failed request for tracking visitors: %s, data: %s", visitorCodes, unsentVisitorData)
 			for _, s := range unsentVisitorData {
 				s.MarkAsUnsent()
 			}

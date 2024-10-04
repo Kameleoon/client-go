@@ -1,6 +1,7 @@
 package hybrid
 
 import (
+	"github.com/Kameleoon/client-go/v3/managers/data"
 	"errors"
 	"fmt"
 	"strings"
@@ -14,8 +15,8 @@ import (
 
 const (
 	tcInit                  = "window.kameleoonQueue=window.kameleoonQueue||[];"
-	tcAssignVariationFormat = "window.kameleoonQueue.push(['Experiments.assignVariation',%d,%d]);"
-	tcTriggerFormat         = "window.kameleoonQueue.push(['Experiments.trigger',%d,true]);"
+	tcAssignVariationFormat = "window.kameleoonQueue.push(['Experiments.assignVariation',%d,%d,true]);"
+	tcTriggerFormat         = "window.kameleoonQueue.push(['Experiments.trigger',%d,%t]);"
 )
 
 // Represents a tool type that is supposed to manage Hybrid integration.
@@ -26,9 +27,10 @@ type HybridManager interface {
 
 type HybridManagerImpl struct {
 	expirationTime time.Duration
+	dataManager    data.DataManager
 }
 
-func NewHybridManagerImpl(expirationTime time.Duration) (*HybridManagerImpl, error) {
+func NewHybridManagerImpl(expirationTime time.Duration, dataManager data.DataManager) (*HybridManagerImpl, error) {
 	logging.Debug("CALL: NewHybridManagerImpl(expirationTime: %s)", expirationTime)
 	var err error
 	var hybridManagerImpl *HybridManagerImpl
@@ -37,7 +39,7 @@ func NewHybridManagerImpl(expirationTime time.Duration) (*HybridManagerImpl, err
 		logging.Error("HybridManager isn't initialized properly, "+
 			"GetEngineTrackingCode method isn't available for call. error %s", err)
 	} else {
-		hybridManagerImpl = &HybridManagerImpl{expirationTime: expirationTime}
+		hybridManagerImpl = &HybridManagerImpl{expirationTime: expirationTime, dataManager: dataManager}
 	}
 	logging.Debug("RETURN: NewHybridManagerImpl(expirationTime: %s) -> (hybridManagerImpl, error: %s)",
 		expirationTime, err)
@@ -54,8 +56,9 @@ func (hm *HybridManagerImpl) GetEngineTrackingCode(
 		expiredTime := time.Now().Add(-hm.expirationTime)
 		variations.Enumerate(func(av *types.AssignedVariation) bool {
 			if av.AssignmentTime().After(expiredTime) {
+				trackingOnly := !hm.dataManager.DataFile().HasExperimentJsCssVariable(av.ExperimentId())
 				trackingCode.WriteString(fmt.Sprintf(tcAssignVariationFormat, av.ExperimentId(), av.VariationId()))
-				trackingCode.WriteString(fmt.Sprintf(tcTriggerFormat, av.ExperimentId()))
+				trackingCode.WriteString(fmt.Sprintf(tcTriggerFormat, av.ExperimentId(), trackingOnly))
 			}
 			return true
 		})

@@ -1,9 +1,10 @@
 package cookie
 
 import (
-	"github.com/Kameleoon/client-go/v3/logging"
 	"strings"
 	"time"
+
+	"github.com/Kameleoon/client-go/v3/logging"
 
 	"github.com/Kameleoon/client-go/v3/managers/data"
 	"github.com/Kameleoon/client-go/v3/utils"
@@ -87,7 +88,7 @@ func (cm *CookieManagerImpl) GetOrAdd(request *fasthttp.Request, response *fasth
 		} else {
 			vc = utils.GenerateVisitorCode()
 			logging.Debug("Generated new visitor code %s", vc)
-			if !cm.dataManager.IsConsentRequired() {
+			if !cm.dataManager.IsVisitorCodeManaged() {
 				cm.add(vc, response)
 			}
 			logging.Debug("RETURN: CookieManagerImpl.GetOrAdd(request, response, defaultVisitorCode: %s) -> "+
@@ -124,7 +125,7 @@ func (cm *CookieManagerImpl) add(visitorCode string, response *fasthttp.Response
 
 func (cm *CookieManagerImpl) remove(response *fasthttp.Response) {
 	logging.Debug("CALL: CookieManagerImpl.remove(response)")
-	if cm.dataManager.IsConsentRequired() {
+	if cm.dataManager.IsVisitorCodeManaged() {
 		response.Header.DelCookie(visitorCodeCookie)
 	}
 	logging.Debug("RETURN: CookieManagerImpl.remove(response)")

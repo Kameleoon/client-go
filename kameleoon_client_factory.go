@@ -46,15 +46,13 @@ func (cf *kameleoonClientFactory) createWithConfigSource(siteCode string,
 			if former != nil {
 				return former
 			}
+			var client *kameleoonClient
 			cfg, cerr := cfgSrc()
 			if cerr == nil {
-				client, cerr := newClient(siteCode, cfg)
-				if cerr == nil {
-					return client
-				}
+				client, cerr = newClient(siteCode, cfg)
 			}
 			err = cerr
-			return nil
+			return client
 		}), err
 }
 

@@ -9,6 +9,10 @@ type Variation struct {
 	Variables    map[string]Variable
 }
 
+func (v Variation) IsActive() bool {
+	return v.Key == string(VariationOff)
+}
+
 func (v Variation) String() string {
 	return fmt.Sprintf(
 		"Variation{Key:'%v',VariationID:%v,ExperimentID:%v,Variables:%v}",

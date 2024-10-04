@@ -3,6 +3,8 @@ package kameleoon
 import (
 	"time"
 
+	"github.com/Kameleoon/client-go/v3/utils"
+
 	"github.com/Kameleoon/client-go/v3/errs"
 	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/cristalhq/aconfig"
@@ -58,7 +60,7 @@ func (c *KameleoonClientConfig) defaults() error {
 
 	if c.RefreshInterval < time.Minute {
 		if c.RefreshInterval != 0 {
-			logging.Warning("Config update interval must not be less than a minute."+
+			logging.Warning("Config update interval must not be less than a minute. "+
 				"Default config update interval (%s minutes) was applied", int(DefaultRefreshInterval.Minutes()))
 		}
 		c.RefreshInterval = DefaultRefreshInterval
@@ -92,6 +94,7 @@ func (c *KameleoonClientConfig) defaults() error {
 		logging.Warning("Setting top level domain is strictly recommended, " +
 			"otherwise you may have problems when using subdomains.")
 	}
+	c.TopLevelDomain = utils.ValidateTopLevelDomain(c.TopLevelDomain)
 	if len(c.Environment) == 0 {
 		c.Environment = DefaultEnvironment
 	}

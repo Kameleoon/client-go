@@ -1,21 +1,25 @@
 package configuration
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/Kameleoon/client-go/v3/errs"
 	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/types"
-	"fmt"
 )
 
 type DataFile struct {
-	customDataInfo  *types.CustomDataInfo
-	settings        Settings
-	featureFlags    map[string]*FeatureFlag
-	environment     string
-	hasAnyTDRule    bool
-	featureFlagById map[int]types.FeatureFlag
-	ruleBySegmentId map[int]types.Rule
-	variationById   map[int]*types.VariationByExposition
+	customDataInfo                   *types.CustomDataInfo
+	settings                         Settings
+	featureFlags                     map[string]*FeatureFlag
+	orderedFeatureFlags              []types.FeatureFlag
+	environment                      string
+	hasAnyTDRule                     bool
+	featureFlagById                  map[int]types.FeatureFlag
+	ruleBySegmentId                  map[int]types.Rule
+	variationById                    map[int]*types.VariationByExposition
+	experimentIdsWithJSOrCSSVariable map[int]struct{}
 }
 
 func (df DataFile) String() string {
@@ -27,20 +31,23 @@ func NewDataFile(configuration Configuration, environment string) *DataFile {
 	logging.Debug("CALL: NewDataFile(configuration: %s, environment: %s)",
 		configuration, environment)
 	ffs := collectFeatureFlagsFromConfiguration(configuration)
-	featureFlagById, ruleBySegmentId, variationById := collectIndices(ffs)
+	orderedFFs := collectOrderedFeatureFlags(ffs)
+	featureFlagById, ruleBySegmentId, variationById, experimentIdsWithJSOrCSSVariable := collectIndices(ffs)
 	cdi := configuration.CustomDataInfo
 	if cdi == nil {
 		cdi = types.NewCustomDataInfo()
 	}
 	dataFile := &DataFile{
-		customDataInfo:  cdi,
-		settings:        configuration.Settings,
-		featureFlags:    ffs,
-		environment:     environment,
-		hasAnyTDRule:    detIfHasAnyTargetedDeliveryRule(ffs),
-		featureFlagById: featureFlagById,
-		ruleBySegmentId: ruleBySegmentId,
-		variationById:   variationById,
+		customDataInfo:                   cdi,
+		settings:                         configuration.Settings,
+		featureFlags:                     ffs,
+		orderedFeatureFlags:              orderedFFs,
+		environment:                      environment,
+		hasAnyTDRule:                     detIfHasAnyTargetedDeliveryRule(ffs),
+		featureFlagById:                  featureFlagById,
+		ruleBySegmentId:                  ruleBySegmentId,
+		variationById:                    variationById,
+		experimentIdsWithJSOrCSSVariable: experimentIdsWithJSOrCSSVariable,
 	}
 	logging.Debug("RETURN: NewDataFile(configuration: %s, environment: %s) -> (dataFile: %s)",
 		configuration, environment, dataFile)
@@ -92,6 +99,21 @@ func (df *DataFile) GetFeatureFlags() map[string]types.FeatureFlag {
 	return ffs
 }
 
+func (df *DataFile) GetOrderedFeatureFlags() []types.FeatureFlag {
+	return df.orderedFeatureFlags
+}
+
+func collectOrderedFeatureFlags(ffs map[string]*FeatureFlag) []types.FeatureFlag {
+	ordered := make([]types.FeatureFlag, 0, len(ffs))
+	for _, ff := range ffs {
+		ordered = append(ordered, ff)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		return ordered[i].GetId() < ordered[j].GetId()
+	})
+	return ordered
+}
+
 func (df *DataFile) HasAnyTargetedDeliveryRule() bool {
 	return df.hasAnyTDRule
 }
@@ -106,6 +128,11 @@ func (df *DataFile) GetRuleBySegmentId(segmentId int) types.Rule {
 
 func (df *DataFile) GetVariation(variationId int) *types.VariationByExposition {
 	return df.variationById[variationId]
+}
+
+func (df *DataFile) HasExperimentJsCssVariable(experimentId int) bool {
+	_, exists := df.experimentIdsWithJSOrCSSVariable[experimentId]
+	return exists
 }
 
 func detIfHasAnyTargetedDeliveryRule(featureFlags map[string]*FeatureFlag) bool {
@@ -125,11 +152,14 @@ func collectIndices(featureFlags map[string]*FeatureFlag) (
 	featureFlagById map[int]types.FeatureFlag,
 	ruleBySegmentId map[int]types.Rule,
 	variationById map[int]*types.VariationByExposition,
+	experimentIdsWithJSOrCSSVariable map[int]struct{},
 ) {
 	featureFlagById = make(map[int]types.FeatureFlag)
 	ruleBySegmentId = make(map[int]types.Rule)
 	variationById = make(map[int]*types.VariationByExposition)
+	experimentIdsWithJSOrCSSVariable = make(map[int]struct{})
 	for _, ff := range featureFlags {
+		hasFeatureFlagVariableJsCss := hasFeatureFlagVariableJsCss(ff)
 		for ir := len(ff.Rules) - 1; ir >= 0; ir-- {
 			rulePtr := &ff.Rules[ir]
 			// ruleBySegmentId
@@ -143,9 +173,25 @@ func collectIndices(featureFlags map[string]*FeatureFlag) (
 					variationById[*variationPtr.VariationID] = variationPtr
 				}
 			}
+			// experimentIdsWithJSOrCSSVariable
+			if hasFeatureFlagVariableJsCss {
+				experimentIdsWithJSOrCSSVariable[rulePtr.ExperimentId] = struct{}{}
+			}
 		}
 		// featureFlagById
 		featureFlagById[ff.Id] = ff
 	}
 	return
+}
+
+func hasFeatureFlagVariableJsCss(featureFlag *FeatureFlag) bool {
+	if len(featureFlag.GetVariations()) > 0 {
+		variation := featureFlag.GetVariations()[0]
+		for _, variable := range variation.Variables {
+			if variable.Type == "JS" || variable.Type == "CSS" {
+				return true
+			}
+		}
+	}
+	return false
 }
