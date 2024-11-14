@@ -26,13 +26,14 @@ func (c *PageTitleCondition) CheckTargeting(targetData interface{}) bool {
 	targeting := false
 	pageViewStorage, ok := targetData.(storage.DataMapStorage[string, types.PageViewVisit])
 	if ok && (pageViewStorage != nil) {
+		var latest types.PageViewVisit
 		pageViewStorage.Enumerate(func(pvv types.PageViewVisit) bool {
-			if c.checkTargeting(pvv.PageView.Title()) {
-				targeting = true
-				return false
+			if pvv.LastTimestamp > latest.LastTimestamp {
+				latest = pvv
 			}
 			return true
 		})
+		return latest.PageView != nil && c.checkTargeting(latest.PageView.Title())
 	}
 	return targeting
 }

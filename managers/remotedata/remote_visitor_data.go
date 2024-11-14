@@ -18,6 +18,7 @@ type remoteVisitorData struct {
 	geolocation           *types.Geolocation
 	previousVisitorVisits *types.VisitorVisits
 	kcsHeat               *types.KcsHeat
+	visitorCode           string
 }
 
 func (rvd *remoteVisitorData) MarkVisitorDataAsSent(customDataInfo *types.CustomDataInfo) {
@@ -152,6 +153,9 @@ func (rvd *remoteVisitorData) parsePreviousVisits(m *remoteVisitorDataModel) {
 }
 
 func (rvd *remoteVisitorData) parseVisit(v *visitModel /*non-nil*/) {
+	if rvd.visitorCode == "" {
+		rvd.visitorCode = v.VisitorCode
+	}
 	rvd.parseCustomData(v.CustomDataEvents)
 	rvd.parsePages(v.PageEvents)
 	rvd.parseExperiments(v.ExperimentEvents)
@@ -272,6 +276,7 @@ type remoteVisitorDataModel struct {
 
 type visitModel struct {
 	TimeStarted       int64                                   `json:"timeStarted"`
+	VisitorCode       string                                  `json:"visitorCode"`
 	CustomDataEvents  []*dataEventModel[customDataModel]      `json:"customDataEvents"`
 	PageEvents        []*dataEventModel[pageDataModel]        `json:"pageEvents"`
 	ExperimentEvents  []*dataEventModel[experimentDataModel]  `json:"experimentEvents"`

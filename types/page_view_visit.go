@@ -1,6 +1,9 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type PageViewVisit struct {
 	PageView      *PageView
@@ -8,19 +11,23 @@ type PageViewVisit struct {
 	LastTimestamp int64 // in milliseconds (server returns in ms as well)
 }
 
-func (pvv PageViewVisit) String() string {
-	return fmt.Sprintf(
-		"PageViewVisit{PageView:%v,Count:%v,LastTimestamp:%v}",
-		pvv.PageView,
-		pvv.Count,
-		pvv.LastTimestamp,
-	)
+func NewPageViewVisit(pageView *PageView, count int, lastTimestamp ...int64) PageViewVisit {
+	var lastTS int64
+	if len(lastTimestamp) > 0 {
+		lastTS = lastTimestamp[0]
+	} else {
+		lastTS = time.Now().UnixMilli()
+	}
+	pvv := PageViewVisit{
+		PageView:      pageView,
+		Count:         count,
+		LastTimestamp: lastTS,
+	}
+	return pvv
 }
 
 func (pvv PageViewVisit) Overwrite(newPageView *PageView) PageViewVisit {
-	pvv.PageView = newPageView
-	pvv.Count++
-	return pvv
+	return NewPageViewVisit(newPageView, pvv.Count+1)
 }
 
 func (pvv PageViewVisit) Merge(other PageViewVisit) PageViewVisit {
@@ -33,4 +40,13 @@ func (pvv PageViewVisit) Merge(other PageViewVisit) PageViewVisit {
 
 func (pvv PageViewVisit) DataType() DataType {
 	return DataTypePageViewVisit
+}
+
+func (pvv PageViewVisit) String() string {
+	return fmt.Sprintf(
+		"PageViewVisit{PageView:%v,Count:%v,LastTimestamp:%v}",
+		pvv.PageView,
+		pvv.Count,
+		pvv.LastTimestamp,
+	)
 }

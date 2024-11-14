@@ -23,19 +23,16 @@ func NewPageUrlCondition(c types.TargetingCondition) *PageUrlCondition {
 }
 
 func (c *PageUrlCondition) CheckTargeting(targetData interface{}) bool {
-	targeting := false
 	pageViewStorage, ok := targetData.(storage.DataMapStorage[string, types.PageViewVisit])
 	if ok && (pageViewStorage != nil) {
-		if c.MatchType == types.OperatorExact {
-			return pageViewStorage.Get(c.Value).PageView != nil
-		}
+		var latest types.PageViewVisit
 		pageViewStorage.Enumerate(func(pvv types.PageViewVisit) bool {
-			if c.checkTargeting(pvv.PageView.URL()) {
-				targeting = true
-				return false
+			if pvv.LastTimestamp > latest.LastTimestamp {
+				latest = pvv
 			}
 			return true
 		})
+		return latest.PageView != nil && c.checkTargeting(latest.PageView.URL())
 	}
-	return targeting
+	return false
 }

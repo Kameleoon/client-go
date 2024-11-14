@@ -1,9 +1,10 @@
 package tracking
 
 import (
-	"github.com/Kameleoon/client-go/v3/logging"
 	"strings"
 	"time"
+
+	"github.com/Kameleoon/client-go/v3/logging"
 
 	"github.com/Kameleoon/client-go/v3/managers/data"
 	"github.com/Kameleoon/client-go/v3/network"
@@ -21,7 +22,7 @@ type TrackingManager interface {
 }
 
 const (
-	LinesDelimeter   = "\n"
+	LinesDelimiter   = "\n"
 	RequestSizeLimit = 2560 * 1024 // 2.5 * 1024^2 characters
 )
 
@@ -118,7 +119,7 @@ func (tm *TrackingManagerImpl) performTrackingRequest(
 	for _, s := range unsentVisitorData {
 		s.MarkAsTransmitting()
 	}
-	lines := strings.Join(trackingLines, LinesDelimeter)
+	lines := strings.Join(trackingLines, LinesDelimiter)
 	go func() {
 		out, err := tm.networkManager.SendTrackingData(lines)
 		if (err == nil) && out {

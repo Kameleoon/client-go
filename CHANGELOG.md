@@ -1,6 +1,13 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.6.0 - 2024-11-14
+### Features
+* Introduced a new `VisitorCode` parameter to [`RemoteVisitorDataFilter`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#using-parameters-in-getremotevisitordata). This parameter determines whether to use the `VisitorCode` from the most recent previous visit instead of the current `VisitorCode`. When enabled, this feature allows visitor exposure to be based on the retrieved `VisitorCode`, facilitating [cross-device reconciliation](https://developers.kameleoon.com/core-concepts/cross-device-experimentation/). Default value of the parameter is `true`.
+### Bug fixes
+* Fixed an issue with the [`Page URL`](https://developers.kameleoon.com/feature-management-and-experimentation/using-visit-history-in-feature-flags-and-experiments/#benefits-of-calling-getremotevisitordata) and [`Page Title`](https://developers.kameleoon.com/feature-management-and-experimentation/using-visit-history-in-feature-flags-and-experiments/#benefits-of-calling-getremotevisitordata) targeting conditions, where the condition evaluated all previously visited URLs in the session instead of only the current URL, corresponding to the latest added [`PageView`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#pageview).<br/>
+**NOTE**: This change may impact your existing targeting. Please review your targeting conditions to ensure accuracy.
+
 ## 3.5.0 - 2024-10-04
 ### Features
 * Introduced new evaluation methods for clarity and improved efficiency when working with the SDK:

@@ -122,7 +122,7 @@ func (nm *NetworkManagerImpl) makeCall(request *Request, attemptCount int, retry
 			return response.Body, nil
 		}
 	}
-	logging.Error("%s call '%s' failed: %s", request.Method, request.Url, err)
+	logging.Error("%s call %s failed: %s", request.Method, request.Url, err)
 	return nil, err
 }
 

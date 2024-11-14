@@ -92,7 +92,13 @@ func (v *VisitorImpl) MappingIdentifier() *string {
 	return v.data.mappingIdentifier
 }
 func (v *VisitorImpl) SetMappingIdentifier(value *string) {
-	v.data.mappingIdentifier = value
+	if v.data.mappingIdentifier == nil {
+		v.data.mx.Lock()
+		defer v.data.mx.Unlock()
+		if v.data.mappingIdentifier == nil {
+			v.data.mappingIdentifier = value
+		}
+	}
 }
 
 func (v *VisitorImpl) EnumerateSendableData(f func(types.Sendable) bool) {
@@ -375,7 +381,7 @@ func (vd *visitorData) addPageView(data types.BaseData) {
 		if pvv, contains := vd.pageViewVisits[pv.URL()]; contains {
 			vd.pageViewVisits[pv.URL()] = pvv.Overwrite(pv)
 		} else {
-			vd.pageViewVisits[pv.URL()] = types.PageViewVisit{PageView: pv, Count: 1}
+			vd.pageViewVisits[pv.URL()] = types.NewPageViewVisit(pv, 1)
 		}
 	}
 }

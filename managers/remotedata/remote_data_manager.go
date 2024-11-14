@@ -78,6 +78,7 @@ func (rdm *remoteDataManagerImpl) GetVisitorData(
 	if visitor != nil {
 		isUniqueIdentifier = visitor.IsUniqueIdentifier()
 	}
+	filter.ApplyDefaultValues()
 	out, err := rdm.networkManager.GetRemoteVisitorData(visitorCode, filter, isUniqueIdentifier, timeoutValue)
 	if err != nil {
 		logging.Error("Failed to fetch remote visitor data for %s: %s", visitorCode, err)
@@ -97,8 +98,14 @@ func (rdm *remoteDataManagerImpl) GetVisitorData(
 	}
 	data.MarkVisitorDataAsSent(rdm.dataManager.DataFile().CustomDataInfo())
 	if addData {
+		// Cannot use `visitorManager.AddData` because it could use remote visitor data for mapping
 		visitor = rdm.visitorManager.GetOrCreateVisitor(visitorCode)
 		visitor.AddBaseData(false, data.CollectDataToAdd()...)
+	}
+	if (filter.VisitorCode == true) && (data.visitorCode != "") {
+		// We apply visitor code from the latest visit fetched from Data API
+		visitor = rdm.visitorManager.GetOrCreateVisitor(visitorCode)
+		visitor.SetMappingIdentifier(&data.visitorCode)
 	}
 	visitorData := data.CollectVisitorDataToReturn()
 	logging.Debug(
