@@ -11,6 +11,7 @@ const (
 	HTTPS        = "https://"
 	REGEX_DOMAIN = `^(\.?(([a-zA-Z\d][a-zA-Z\d-]*[a-zA-Z\d])|[a-zA-Z\d]))` +
 		`(\.(([a-zA-Z\d][a-zA-Z\d-]*[a-zA-Z\d])|[a-zA-Z\d])){1,126}$`
+	LOCALHOST = "localhost"
 )
 
 func ValidateTopLevelDomain(topLevelDomain string) string {
@@ -35,9 +36,12 @@ func ValidateTopLevelDomain(topLevelDomain string) string {
 		return topLevelDomain
 	}
 
-	if !matched {
-		logging.Error("The top-level domain %s is invalid.", topLevelDomain)
-		return ""
+	if !matched && topLevelDomain != LOCALHOST {
+		logging.Error(
+			"The top-level domain %s is invalid. The value has been set as provided, but it does not meet"+
+				" the required format for proper SDK functionality. Please check the domain for correctness.",
+			topLevelDomain)
+		return topLevelDomain
 	}
 
 	return topLevelDomain
