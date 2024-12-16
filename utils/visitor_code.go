@@ -22,5 +22,5 @@ func ValidateVisitorCode(visitorCode string) error {
 }
 
 func GenerateVisitorCode() string {
-	return GetRandomString(VisitorCodeLength)
+	return GetRandomString(VisitorCodeLength, "abcdefghijklmnopqrstuvwxyz0123456789")
 }

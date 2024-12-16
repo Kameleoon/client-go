@@ -1,17 +1,14 @@
 package utils
 
 import (
+	crand "crypto/rand"
+	"encoding/binary"
 	"math/rand"
 	"strings"
 	"sync"
 	"time"
-)
 
-const letterBytes = "ABCDEF0123456789"
-const (
-	letterIdxBits = 6                    // 6 bits to represent a letter index
-	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
-	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+	"github.com/Kameleoon/client-go/v3/logging"
 )
 
 var random *rand.Rand
@@ -24,13 +21,29 @@ func getRandom() *rand.Rand {
 		randomMx.Lock()
 		defer randomMx.Unlock()
 		if random == nil {
-			random = rand.New(rand.NewSource(time.Now().UnixNano()))
+			random = rand.New(rand.NewSource(getRandomSeed()))
 		}
 	}
 	return random
 }
 
-func GetRandomString(n int) string {
+func getRandomSeed() int64 {
+	var seedBuffer [8]byte
+	if _, err := crand.Read(seedBuffer[:]); err != nil {
+		logging.Error("Failed to generate random seed: %s", err)
+		return time.Now().UnixNano()
+	}
+	return int64(binary.BigEndian.Uint64(seedBuffer[:]))
+}
+
+const (
+	letterIdxBits = 6                    // 6 bits to represent a letter index
+	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+)
+
+// `letterBytes` should not be longer than 64 chars. All chars after this limit will be ignored.
+func GetRandomString(n int, letterBytes string) string {
 	rnd := getRandom()
 	sb := strings.Builder{}
 	sb.Grow(n)

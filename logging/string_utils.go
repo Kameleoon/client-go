@@ -7,6 +7,10 @@ import (
 )
 
 func ObjectToString(data interface{}) string {
+	if err, ok := data.(error); ok {
+		return err.Error()
+	}
+
 	value := reflect.ValueOf(data)
 
 	switch value.Kind() {

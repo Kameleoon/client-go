@@ -10,7 +10,7 @@ type Variation struct {
 }
 
 func (v Variation) IsActive() bool {
-	return v.Key == string(VariationOff)
+	return v.Key != string(VariationOff)
 }
 
 func (v Variation) String() string {

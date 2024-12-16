@@ -39,6 +39,11 @@ type Visitor interface {
 	AddBaseData(overwrite bool, data ...types.BaseData)
 	AssignVariation(variation *types.AssignedVariation)
 
+	GetForcedFeatureVariation(featureKey string) *types.ForcedFeatureVariation
+	GetForcedExperimentVariation(experimentId int) *types.ForcedExperimentVariation
+	ResetForcedVariation(experimentId int)
+	UpdateSimulatedVariations(variations []*types.ForcedFeatureVariation)
+
 	Clone() Visitor
 }
 
@@ -177,6 +182,58 @@ func (v *VisitorImpl) Variations() DataMapStorage[int, *types.AssignedVariation]
 	return storage
 }
 
+func (v *VisitorImpl) GetForcedFeatureVariation(featureKey string) *types.ForcedFeatureVariation {
+	logging.Debug("CALL: VisitorImpl.GetForcedFeatureVariation(featureKey: %s)", featureKey)
+	var variation *types.ForcedFeatureVariation
+	if v.data.simulatedVariations != nil {
+		v.data.mx.RLock()
+		variation = v.data.simulatedVariations[featureKey]
+		v.data.mx.RUnlock()
+	}
+	logging.Debug(
+		"RETURN: VisitorImpl.GetForcedFeatureVariation(featureKey: %s) -> (variation: %s)",
+		featureKey, variation,
+	)
+	return variation
+}
+func (v *VisitorImpl) GetForcedExperimentVariation(experimentId int) *types.ForcedExperimentVariation {
+	logging.Debug("CALL: VisitorImpl.GetForcedExperimentVariation(experimentId: %s)", experimentId)
+	var variation *types.ForcedExperimentVariation
+	if v.data.forcedVariations != nil {
+		v.data.mx.RLock()
+		variation = v.data.forcedVariations[experimentId]
+		v.data.mx.RUnlock()
+	}
+	logging.Debug(
+		"RETURN: VisitorImpl.GetForcedExperimentVariation(experimentId: %s) -> (variation: %s)",
+		experimentId, variation,
+	)
+	return variation
+}
+func (v *VisitorImpl) ResetForcedVariation(experimentId int) {
+	logging.Debug("CALL: VisitorImpl.ResetForcedVariation(experimentId: %s)", experimentId)
+	if v.data.forcedVariations != nil {
+		v.data.mx.Lock()
+		delete(v.data.forcedVariations, experimentId)
+		v.data.mx.Unlock()
+	}
+	logging.Debug("RETURN: VisitorImpl.ResetForcedVariation(experimentId: %s)", experimentId)
+}
+func (v *VisitorImpl) UpdateSimulatedVariations(variations []*types.ForcedFeatureVariation) {
+	if (len(v.data.simulatedVariations) == 0) && (len(variations) == 0) {
+		return
+	}
+	logging.Debug("CALL: VisitorImpl.UpdateSimulatedVariations(variations: %s)", variations)
+	newSimulatedVariations := make(map[string]*types.ForcedFeatureVariation)
+	for _, variation := range variations {
+		newSimulatedVariations[variation.FeatureKey()] = variation
+	}
+	v.data.mx.Lock()
+	v.data.simulatedVariations = newSimulatedVariations
+	v.data.mx.Unlock()
+	logging.Debug("RETURN: VisitorImpl.UpdateSimulatedVariations(variations: %s)", variations)
+}
+
 func (v *VisitorImpl) AddData(data ...types.Data) {
 	logging.Debug("CALL: VisitorImpl.AddData(data: %s)", data)
 	v.data.mx.Lock()
@@ -225,6 +282,10 @@ func (v *VisitorImpl) addData(overwrite bool, data types.BaseData) {
 		v.data.addConversion(data)
 	case types.DataTypeAssignedVariation:
 		v.data.addVariation(data, overwrite)
+	case types.DataTypeForcedFeatureVariation:
+		v.data.addForcedFeatureVariation(data)
+	case types.DataTypeForcedExperimentVariation:
+		v.data.addForcedExperimentVariation(data)
 	case types.DataTypeUniqueIdentifier:
 		v.setUniqueIdentifier(data)
 	default:
@@ -250,22 +311,24 @@ func (v *VisitorImpl) Clone() Visitor {
 }
 
 type visitorData struct {
-	mx                sync.RWMutex
-	lastActivityTime  time.Time
-	mappingIdentifier *string
-	userAgent         string
-	legalConsent      bool
-	device            *types.Device
-	browser           *types.Browser
-	cookie            *types.Cookie
-	operatingSystem   *types.OperatingSystem
-	geolocation       *types.Geolocation
-	kcsHeat           *types.KcsHeat
-	visitorVisits     *types.VisitorVisits
-	customDataMap     map[int]types.ICustomData
-	pageViewVisits    map[string]types.PageViewVisit
-	conversions       []*types.Conversion
-	variations        map[int]*types.AssignedVariation
+	mx                  sync.RWMutex
+	lastActivityTime    time.Time
+	mappingIdentifier   *string
+	userAgent           string
+	legalConsent        bool
+	device              *types.Device
+	browser             *types.Browser
+	cookie              *types.Cookie
+	operatingSystem     *types.OperatingSystem
+	geolocation         *types.Geolocation
+	kcsHeat             *types.KcsHeat
+	visitorVisits       *types.VisitorVisits
+	customDataMap       map[int]types.ICustomData
+	pageViewVisits      map[string]types.PageViewVisit
+	conversions         []*types.Conversion
+	variations          map[int]*types.AssignedVariation
+	forcedVariations    map[int]*types.ForcedExperimentVariation
+	simulatedVariations map[string]*types.ForcedFeatureVariation
 }
 
 func (vd *visitorData) enumerateSendableData(f func(types.Sendable) bool) {
@@ -408,6 +471,22 @@ func (vd *visitorData) addConversion(data types.BaseData) {
 func (vd *visitorData) addVariation(data types.BaseData, overwrite bool) {
 	if av, ok := data.(*types.AssignedVariation); ok {
 		vd.assignVariation(av, overwrite)
+	}
+}
+func (vd *visitorData) addForcedFeatureVariation(data types.BaseData) {
+	if ffv, ok := data.(*types.ForcedFeatureVariation); ok {
+		if vd.simulatedVariations == nil {
+			vd.simulatedVariations = make(map[string]*types.ForcedFeatureVariation, 1)
+		}
+		vd.simulatedVariations[ffv.FeatureKey()] = ffv
+	}
+}
+func (vd *visitorData) addForcedExperimentVariation(data types.BaseData) {
+	if fev, ok := data.(*types.ForcedExperimentVariation); ok {
+		if vd.forcedVariations == nil {
+			vd.forcedVariations = make(map[int]*types.ForcedExperimentVariation, 1)
+		}
+		vd.forcedVariations[fev.Rule().GetRuleBase().ExperimentId] = fev
 	}
 }
 

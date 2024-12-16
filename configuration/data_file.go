@@ -18,6 +18,7 @@ type DataFile struct {
 	hasAnyTDRule                     bool
 	featureFlagById                  map[int]types.FeatureFlag
 	ruleBySegmentId                  map[int]types.Rule
+	ruleInfoByExpId                  map[int]types.RuleInfo
 	variationById                    map[int]*types.VariationByExposition
 	experimentIdsWithJSOrCSSVariable map[int]struct{}
 }
@@ -32,7 +33,8 @@ func NewDataFile(configuration Configuration, environment string) *DataFile {
 		configuration, environment)
 	ffs := collectFeatureFlagsFromConfiguration(configuration)
 	orderedFFs := collectOrderedFeatureFlags(ffs)
-	featureFlagById, ruleBySegmentId, variationById, experimentIdsWithJSOrCSSVariable := collectIndices(ffs)
+	featureFlagById, ruleBySegmentId, ruleInfoByExpId, variationById, experimentIdsWithJSOrCSSVariable :=
+		collectIndices(ffs)
 	cdi := configuration.CustomDataInfo
 	if cdi == nil {
 		cdi = types.NewCustomDataInfo()
@@ -46,6 +48,7 @@ func NewDataFile(configuration Configuration, environment string) *DataFile {
 		hasAnyTDRule:                     detIfHasAnyTargetedDeliveryRule(ffs),
 		featureFlagById:                  featureFlagById,
 		ruleBySegmentId:                  ruleBySegmentId,
+		ruleInfoByExpId:                  ruleInfoByExpId,
 		variationById:                    variationById,
 		experimentIdsWithJSOrCSSVariable: experimentIdsWithJSOrCSSVariable,
 	}
@@ -126,6 +129,11 @@ func (df *DataFile) GetRuleBySegmentId(segmentId int) types.Rule {
 	return df.ruleBySegmentId[segmentId]
 }
 
+func (df *DataFile) GetRuleInfoByExpId(experimentId int) (types.RuleInfo, bool) {
+	ruleInfo, exists := df.ruleInfoByExpId[experimentId]
+	return ruleInfo, exists
+}
+
 func (df *DataFile) GetVariation(variationId int) *types.VariationByExposition {
 	return df.variationById[variationId]
 }
@@ -151,11 +159,13 @@ func detIfHasAnyTargetedDeliveryRule(featureFlags map[string]*FeatureFlag) bool 
 func collectIndices(featureFlags map[string]*FeatureFlag) (
 	featureFlagById map[int]types.FeatureFlag,
 	ruleBySegmentId map[int]types.Rule,
+	ruleInfoByExpId map[int]types.RuleInfo,
 	variationById map[int]*types.VariationByExposition,
 	experimentIdsWithJSOrCSSVariable map[int]struct{},
 ) {
 	featureFlagById = make(map[int]types.FeatureFlag)
 	ruleBySegmentId = make(map[int]types.Rule)
+	ruleInfoByExpId = make(map[int]types.RuleInfo)
 	variationById = make(map[int]*types.VariationByExposition)
 	experimentIdsWithJSOrCSSVariable = make(map[int]struct{})
 	for _, ff := range featureFlags {
@@ -166,6 +176,8 @@ func collectIndices(featureFlags map[string]*FeatureFlag) (
 			if rulePtr.TargetingSegment != nil {
 				ruleBySegmentId[rulePtr.TargetingSegment.ID] = rulePtr
 			}
+			// ruleInfoByExpId
+			ruleInfoByExpId[rulePtr.ExperimentId] = types.RuleInfo{FeatureFlag: ff, Rule: rulePtr}
 			// variationById
 			for iv := len(rulePtr.VariationByExposition) - 1; iv >= 0; iv-- {
 				variationPtr := &rulePtr.VariationByExposition[iv]

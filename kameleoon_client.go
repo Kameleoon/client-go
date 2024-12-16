@@ -71,6 +71,18 @@ func (p GetVariationsOptParams) Track(value bool) GetVariationsOptParams {
 	return p
 }
 
+type SetForcedVariationOptParams struct {
+	forceTargeting bool
+}
+
+func NewSetForcedVariationOptParams() SetForcedVariationOptParams {
+	return SetForcedVariationOptParams{forceTargeting: true}
+}
+func (p SetForcedVariationOptParams) ForceTargeting(value bool) SetForcedVariationOptParams {
+	p.forceTargeting = value
+	return p
+}
+
 type KameleoonClient interface {
 	WaitInit() error
 
@@ -264,6 +276,31 @@ type KameleoonClient interface {
 	GetActiveFeatures(visitorCode string) (map[string]types.Variation, error)
 
 	GetEngineTrackingCode(visitorCode string) string
+
+	// Sets or resets a forced variation for a visitor in a specific experiment,
+	// so the experiment will be evaluated to the variation for the visitor.
+	//
+	// In order to reset the forced variation set the `variationKey` parameter to empty string.
+	// If the forced variation you want to reset does not exist, the method will have no effect.
+	//
+	// Parameters:
+	// - visitorCode: The unique visitor code identifying the visitor.
+	// - experimentId: The identifier of the experiment you want to set/reset the forced variation for.
+	// - variationKey: The identifier of the variation you want the experiment to be evaluated to.
+	//   Set to empty string to reset the forced variation.
+	// - ForceTargeting: If `true`, the visitor will be targeted to the experiment regardless its conditions.
+	//   Otherwise, the normal targeting logic will be preserved. Optional (defaults to `true`).
+	//
+	// May return one of the following errors:
+	// - VisitorCodeInvalid:
+	//   The provided visitor code is invalid.
+	// - FeatureExperimentNotFound:
+	//   The experiment id does not exist in the feature flag.
+	// - VariationNotFound:
+	//   The variation key does not belong to the experiment.
+	SetForcedVariation(
+		visitorCode string, experimentId int, variationKey string, params ...SetForcedVariationOptParams,
+	) error
 }
 
 type kameleoonClient struct {
@@ -343,7 +380,7 @@ func newClientInternal(
 		visitorManager:       visitorManager,
 		hybridManager:        hybridManager,
 		networkManager:       networkManager,
-		cookieManager:        cookie.NewCookieManagerImpl(dataManager, cfg.TopLevelDomain),
+		cookieManager:        cookie.NewCookieManagerImpl(dataManager, visitorManager, cfg.TopLevelDomain),
 		warehouseManager:     warehouse.NewWarehouseManagerImpl(networkManager, visitorManager),
 		targetingManager:     targetingManager,
 		remoteDataManager:    remoteDataManager,
@@ -531,40 +568,45 @@ func (c *kameleoonClient) GetFeatureVariationKey(
 // getFeatureVariationKey is a helper method for getting variation key for feature flag
 func (c *kameleoonClient) getFeatureVariationKey(
 	visitorCode string, featureKey string,
-) (types.FeatureFlag, string, error) {
-	// validate that visitor code is acceptable else throw VisitorCodeNotValid exception
+) (featureFlag types.FeatureFlag, variationKey string, err error) {
 	logging.Debug(
-		"CALL: kameleoonClient.getFeatureVariationKey(visitorCode: %s, featureKey: %s)",
-		visitorCode, featureKey)
-	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
-		variationKey := string(types.VariationOff)
+		"CALL: kameleoonClient.getFeatureVariationKey(visitorCode: %s, featureKey: %s)", visitorCode, featureKey,
+	)
+	defer func() {
 		logging.Debug(
-			"RETURN: kameleoonClient.getFeatureVariationKey(visitorCode: %s, featureKey: %s) -> (featureFlag: <nil>, "+
-				"variationKey: %s, error: %s)", visitorCode, featureKey, variationKey, err)
-		return nil, variationKey, err
-	}
-	var err error
-	var variationKey string
-	var featureFlag types.FeatureFlag
-	// find enabled feature flag else return an error
-	featureFlag, err = c.dataManager.DataFile().GetFeatureFlag(featureKey)
-	if err != nil {
+			"RETURN: kameleoonClient.getFeatureVariationKey(visitorCode: %s, featureKey: %s) -> (featureFlag: %s, "+
+				"variationKey: %s, error: %s)", visitorCode, featureKey, featureFlag, variationKey, err,
+		)
+	}()
+	if err = utils.ValidateVisitorCode(visitorCode); err != nil {
 		variationKey = string(types.VariationOff)
-	} else {
-		variation, rule := c.calculateVariationRuleForFeature(visitorCode, featureFlag)
-		// get variation key from feature flag
-		defaultVariationKey := featureFlag.GetDefaultVariationKey()
-		variationKey = c.calculateVariationKey(variation, rule, defaultVariationKey)
-
-		c.saveVariation(visitorCode, rule, variation, true)
-		c.trackingManager.AddVisitorCode(visitorCode)
+		return
 	}
-
-	logging.Debug(
-		"RETURN: kameleoonClient.getFeatureVariationKey(visitorCode: %s, featureKey: %s) -> (featureFlag: %s, "+
-			"variationKey: %s, error: %s)",
-		visitorCode, featureKey, featureFlag, variationKey, err)
-	return featureFlag, variationKey, err
+	// find enabled feature flag else return an error
+	if featureFlag, err = c.dataManager.DataFile().GetFeatureFlag(featureKey); err != nil {
+		variationKey = string(types.VariationOff)
+		return
+	}
+	var varByExp *types.VariationByExposition
+	var rule types.Rule
+	var forcedVariation *types.ForcedFeatureVariation
+	if visitor := c.visitorManager.GetVisitor(visitorCode); visitor != nil {
+		forcedVariation = visitor.GetForcedFeatureVariation(featureKey)
+	}
+	if forcedVariation != nil {
+		varByExp = forcedVariation.VarByExp()
+		rule = forcedVariation.Rule()
+	} else {
+		varByExp, rule = c.calculateVariationRuleForFeature(visitorCode, featureFlag)
+	}
+	if (forcedVariation == nil) || !forcedVariation.Simulated() {
+		c.saveVariation(visitorCode, rule, varByExp, true)
+	}
+	// get variation key from feature flag
+	defaultVariationKey := featureFlag.GetDefaultVariationKey()
+	variationKey = c.calculateVariationKey(varByExp, rule, defaultVariationKey)
+	c.trackingManager.AddVisitorCode(visitorCode)
+	return
 }
 
 func (c *kameleoonClient) saveVariation(
@@ -614,17 +656,40 @@ func (c *kameleoonClient) calculateVariationKey(
 // getVariationRuleForFeature is a helper method for calculate variation key for feature flag
 func (c *kameleoonClient) calculateVariationRuleForFeature(
 	visitorCode string, featureFlag types.FeatureFlag,
-) (*types.VariationByExposition, types.Rule) {
-	logging.Debug("CALL: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)",
-		visitorCode, featureFlag)
+) (selectedVariation *types.VariationByExposition, selectedRule types.Rule) {
+	logging.Debug(
+		"CALL: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)",
+		visitorCode, featureFlag,
+	)
+	defer func() {
+		logging.Debug(
+			"RETURN: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)"+
+				" -> (variation: %s, rule: %s)",
+			visitorCode, featureFlag, selectedVariation, selectedRule,
+		)
+	}()
+	visitor := c.visitorManager.GetVisitor(visitorCode)
 	codeForHash := visitorCode
-	if visitor := c.visitorManager.GetVisitor(visitorCode); (visitor != nil) && (visitor.MappingIdentifier() != nil) {
+	if (visitor != nil) && (visitor.MappingIdentifier() != nil) {
 		codeForHash = *visitor.MappingIdentifier()
 	}
 	// no rules -> return DefaultVariationKey
 	for _, rule := range featureFlag.GetRules() {
+		var forcedVariation *types.ForcedExperimentVariation
+		if visitor != nil {
+			forcedVariation = visitor.GetForcedExperimentVariation(rule.GetRuleBase().ExperimentId)
+			if (forcedVariation != nil) && forcedVariation.ForceTargeting() {
+				// Forcing experiment variation in force-targeting mode
+				return forcedVariation.VarByExp(), rule
+			}
+		}
+
 		//check if visitor is targeted for rule, else next rule
 		if c.targetingManager.CheckTargeting(visitorCode, rule.GetRuleBase().ExperimentId, rule) {
+			if forcedVariation != nil {
+				// Forcing experiment variation in targeting-only mode
+				return forcedVariation.VarByExp(), rule
+			}
 
 			// Disable searching in variation storage (uncommented if you need use variation storage)
 			// check for saved variation for rule if it's experimentation rule
@@ -642,10 +707,6 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 					if len(rule.GetRuleBase().VariationByExposition) > 0 {
 						variation = &rule.GetRuleBase().VariationByExposition[0]
 					}
-					logging.Debug(
-						"RETURN: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)"+
-							" -> (variation: %s, rule: %s)",
-						visitorCode, featureFlag, variation, &rule)
 					return variation, rule
 				}
 				//uses for variation's expositions
@@ -656,10 +717,6 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 				// get variation with new hashVariation
 				variation := rule.GetVariationByHash(hashVariation)
 				if variation != nil {
-					logging.Debug(
-						"RETURN: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)"+
-							" -> (variation: %s, rule: %s)",
-						visitorCode, featureFlag, variation, &rule)
 					return variation, rule
 				}
 			}
@@ -668,9 +725,6 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 			}
 		}
 	}
-	logging.Debug(
-		"RETURN: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s) -> "+
-			"(variation: <nil>, rule: <nil>)", visitorCode, featureFlag)
 	return nil, nil
 }
 
@@ -725,10 +779,12 @@ func (c *kameleoonClient) IsFeatureActive(
 		"CALL: kameleoonClient.IsFeatureActive(visitorCode: %s, featureKey: %s, isUniqueIdentifier: %s)",
 		visitorCode, featureKey, isUniqueIdentifier,
 	)
-	defer logging.Info(
-		"RETURN: kameleoonClient.IsFeatureActive(visitorCode: %s, featureKey: %s, isUniqueIdentifier: %s) -> "+
-			"(isFeatureActive: %s, err: %s)", visitorCode, featureKey, isUniqueIdentifier, isFeatureActive, err,
-	)
+	defer func() {
+		logging.Info(
+			"RETURN: kameleoonClient.IsFeatureActive(visitorCode: %s, featureKey: %s, isUniqueIdentifier: %s) -> "+
+				"(isFeatureActive: %s, err: %s)", visitorCode, featureKey, isUniqueIdentifier, isFeatureActive, err,
+		)
+	}()
 	if err = utils.ValidateVisitorCode(visitorCode); err != nil {
 		return
 	}
@@ -746,10 +802,12 @@ func (c *kameleoonClient) IsFeatureActiveWithTracking(
 		"CALL: kameleoonClient.IsFeatureActiveWithTracking(visitorCode: %s, featureKey: %s, track: %s)",
 		visitorCode, featureKey, track,
 	)
-	defer logging.Info(
-		"RETURN: kameleoonClient.IsFeatureActiveWithTracking(visitorCode: %s, featureKey: %s, track: %s) -> "+
-			"(isFeatureActive: %s, err: %s)", visitorCode, featureKey, track, isFeatureActive, err,
-	)
+	defer func() {
+		logging.Info(
+			"RETURN: kameleoonClient.IsFeatureActiveWithTracking(visitorCode: %s, featureKey: %s, track: %s) -> "+
+				"(isFeatureActive: %s, err: %s)", visitorCode, featureKey, track, isFeatureActive, err,
+		)
+	}()
 	if err = utils.ValidateVisitorCode(visitorCode); err != nil {
 		return
 	}
@@ -764,10 +822,12 @@ func (c *kameleoonClient) isFeatureActive(
 		"CALL: kameleoonClient.isFeatureActive(visitorCode: %s, featureKey: %s, track: %s)",
 		visitorCode, featureKey, track,
 	)
-	defer logging.Debug(
-		"RETURN: kameleoonClient.isFeatureActive(visitorCode: %s, featureKey: %s, track: %s) -> "+
-			"(isFeatureActive: %s, err: %s)", visitorCode, featureKey, track, isFeatureActive, err,
-	)
+	defer func() {
+		logging.Debug(
+			"RETURN: kameleoonClient.isFeatureActive(visitorCode: %s, featureKey: %s, track: %s) -> "+
+				"(isFeatureActive: %s, err: %s)", visitorCode, featureKey, track, isFeatureActive, err,
+		)
+	}()
 	var featureFlag types.FeatureFlag
 	if featureFlag, err = c.dataManager.DataFile().GetFeatureFlag(featureKey); err != nil {
 		switch err.(type) {
@@ -792,10 +852,12 @@ func (c *kameleoonClient) GetVariation(
 		"CALL: kameleoonClient.GetVariation(visitorCode: %s, featureKey: %s, params: %s)",
 		visitorCode, featureKey, params,
 	)
-	defer logging.Info(
-		"RETURN: kameleoonClient.GetVariation(visitorCode: %s, featureKey: %s, params: %s) -> (variation: %s, err: %s)",
-		visitorCode, featureKey, params, externalVariation, err,
-	)
+	defer func() {
+		logging.Info(
+			"RETURN: kameleoonClient.GetVariation(visitorCode: %s, featureKey: %s, params: %s) -> "+
+				"(variation: %s, err: %s)", visitorCode, featureKey, params, externalVariation, err,
+		)
+	}()
 	var p GetVariationOptParams
 	if len(params) > 0 {
 		p = params[0]
@@ -825,10 +887,12 @@ func (c *kameleoonClient) GetVariations(
 		"CALL: kameleoonClient.GetVariations(visitorCode: %s, params: %s)",
 		visitorCode, params,
 	)
-	defer logging.Info(
-		"RETURN: kameleoonClient.GetVariations(visitorCode: %s, params: %s) -> (variations: %s, err: %s)",
-		visitorCode, params, variations, err,
-	)
+	defer func() {
+		logging.Info(
+			"RETURN: kameleoonClient.GetVariations(visitorCode: %s, params: %s) -> (variations: %s, err: %s)",
+			visitorCode, params, variations, err,
+		)
+	}()
 	var p GetVariationsOptParams
 	if len(params) > 0 {
 		p = params[0]
@@ -863,10 +927,21 @@ func (c *kameleoonClient) getVariationInfo(
 		"CALL: kameleoonClient.getVariationInfo(visitorCode: %s, featureFlag: %s, track: %s)",
 		visitorCode, featureFlag, track,
 	)
-	varByExp, rule = c.calculateVariationRuleForFeature(visitorCode, featureFlag)
+	var forcedVariation *types.ForcedFeatureVariation
+	if visitor := c.visitorManager.GetVisitor(visitorCode); visitor != nil {
+		forcedVariation = visitor.GetForcedFeatureVariation(featureFlag.GetFeatureKey())
+	}
+	if forcedVariation != nil {
+		varByExp = forcedVariation.VarByExp()
+		rule = forcedVariation.Rule()
+	} else {
+		varByExp, rule = c.calculateVariationRuleForFeature(visitorCode, featureFlag)
+	}
+	if (forcedVariation == nil) || !forcedVariation.Simulated() {
+		c.saveVariation(visitorCode, rule, varByExp, track)
+	}
 	defaultVariationKey := featureFlag.GetDefaultVariationKey()
 	variationKey = c.calculateVariationKey(varByExp, rule, defaultVariationKey)
-	c.saveVariation(visitorCode, rule, varByExp, track)
 	logging.Debug(
 		"RETURN: kameleoonClient.getVariationInfo(visitorCode: %s, featureFlag: %s, track: %s)"+
 			" -> (variationKey: %s, variationByExposition: %s, rule: %s)",
@@ -882,10 +957,12 @@ func makeExternalVariation(
 		"CALL: makeExternalVariation(internalVariation: %s, varByExp: %s, rule: %s)",
 		internalVariation, varByExp, rule,
 	)
-	defer logging.Debug(
-		"RETURN: makeExternalVariation(internalVariation: %s, varByExp: %s, rule: %s) -> (variation: %s)",
-		internalVariation, varByExp, rule, variation,
-	)
+	defer func() {
+		logging.Debug(
+			"RETURN: makeExternalVariation(internalVariation: %s, varByExp: %s, rule: %s) -> (variation: %s)",
+			internalVariation, varByExp, rule, variation,
+		)
+	}()
 	variables := make(map[string]types.Variable)
 	if internalVariation != nil {
 		for _, internalVariable := range internalVariation.Variables {
@@ -1069,10 +1146,22 @@ func (c *kameleoonClient) GetActiveFeatureListForVisitor(visitorCode string) ([]
 	err := utils.ValidateVisitorCode(visitorCode)
 	var arrayIds []string
 	if err == nil {
+		visitor := c.visitorManager.GetVisitor(visitorCode)
 		featureFlags := c.dataManager.DataFile().GetOrderedFeatureFlags()
 		arrayIds = make([]string, 0, len(featureFlags))
 		for _, ff := range featureFlags {
-			variation, rule := c.calculateVariationRuleForFeature(visitorCode, ff)
+			var variation *types.VariationByExposition
+			var rule types.Rule
+			var forcedVariation *types.ForcedFeatureVariation
+			if visitor != nil {
+				forcedVariation = visitor.GetForcedFeatureVariation(ff.GetFeatureKey())
+			}
+			if forcedVariation != nil {
+				variation = forcedVariation.VarByExp()
+				rule = forcedVariation.Rule()
+			} else {
+				variation, rule = c.calculateVariationRuleForFeature(visitorCode, ff)
+			}
 			if ff.GetVariationKey(variation, rule) != string(types.VariationOff) {
 				arrayIds = append(arrayIds, ff.GetFeatureKey())
 			}
@@ -1094,13 +1183,25 @@ func (c *kameleoonClient) GetActiveFeatures(visitorCode string) (map[string]type
 			visitorCode, err)
 		return nil, err
 	}
+	visitor := c.visitorManager.GetVisitor(visitorCode)
 	mapActiveFeatures := make(map[string]types.Variation)
 	for _, ff := range c.dataManager.DataFile().GetOrderedFeatureFlags() {
 		if !ff.GetEnvironmentEnabled() {
 			continue
 		}
 
-		varByExp, rule := c.calculateVariationRuleForFeature(visitorCode, ff)
+		var varByExp *types.VariationByExposition
+		var rule types.Rule
+		var forcedVariation *types.ForcedFeatureVariation
+		if visitor != nil {
+			forcedVariation = visitor.GetForcedFeatureVariation(ff.GetFeatureKey())
+		}
+		if forcedVariation != nil {
+			varByExp = forcedVariation.VarByExp()
+			rule = forcedVariation.Rule()
+		} else {
+			varByExp, rule = c.calculateVariationRuleForFeature(visitorCode, ff)
+		}
 		variationKey := ff.GetVariationKey(varByExp, rule)
 
 		if variationKey == string(types.VariationOff) {
@@ -1192,4 +1293,44 @@ func (c *kameleoonClient) setUniqueIdentifier(visitorCode string, isUniqueIdenti
 	logging.Warning(
 		"The 'isUniqueIdentifier' parameter is deprecated. Please, add 'UniqueIdentifier' to a visitor instead.")
 	c.visitorManager.AddData(visitorCode, types.NewUniqueIdentifier(isUniqueIdentifier))
+}
+
+func (c *kameleoonClient) SetForcedVariation(
+	visitorCode string, experimentId int, variationKey string, params ...SetForcedVariationOptParams,
+) (err error) {
+	logging.Info(
+		"CALL: kameleoonClient.SetForcedVariation(visitorCode: %s, experimentId: %s, variationKey: %s, params: %s)",
+		visitorCode, experimentId, variationKey, params,
+	)
+	defer func() {
+		logging.Info(
+			"RETURN: kameleoonClient.SetForcedVariation(visitorCode: %s, experimentId: %s, variationKey: %s, "+
+				"params: %s) -> (error: %s)", visitorCode, experimentId, variationKey, params, err,
+		)
+	}()
+	if err = utils.ValidateVisitorCode(visitorCode); err != nil {
+		return
+	}
+	visitor := c.visitorManager.GetOrCreateVisitor(visitorCode)
+	if variationKey != "" {
+		ruleInfo, ruleInfoExists := c.dataManager.DataFile().GetRuleInfoByExpId(experimentId)
+		if !ruleInfoExists {
+			return errs.NewFeatureExperimentNotFound(experimentId)
+		}
+		var varByExp *types.VariationByExposition
+		if varByExp, err = ruleInfo.Rule.GetVariationByKey(variationKey); err != nil {
+			return
+		}
+		var p SetForcedVariationOptParams
+		if len(params) > 0 {
+			p = params[0]
+		} else {
+			p = NewSetForcedVariationOptParams()
+		}
+		forcedVariation := types.NewForcedExperimentVariation(ruleInfo.Rule, varByExp, p.forceTargeting)
+		visitor.AddBaseData(true, forcedVariation)
+	} else {
+		visitor.ResetForcedVariation(experimentId)
+	}
+	return
 }
