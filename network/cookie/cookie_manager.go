@@ -221,7 +221,7 @@ func simulatedVariationFromDataFile(
 		if rule.GetRuleBase().ExperimentId != experimentId {
 			continue
 		}
-		varsByExp := rule.GetRuleBase().VariationByExposition
+		varsByExp := rule.GetRuleBase().VariationsByExposition
 		for i := range varsByExp {
 			varId := varsByExp[i].VariationID
 			if (varId != nil) && (*varId == variationId) {

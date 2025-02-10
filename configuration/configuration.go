@@ -1,13 +1,15 @@
 package configuration
 
 import (
+	"fmt"
+
 	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/types"
-	"fmt"
 )
 
 type Configuration struct {
 	CustomDataInfo *types.CustomDataInfo `json:"customData"`
+	Holdout        *types.Experiment     `json:"holdout"`
 	Settings       Settings              `json:"configuration"`
 	FeatureFlags   []FeatureFlag         `json:"featureFlags"`
 }

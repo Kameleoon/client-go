@@ -2,7 +2,7 @@ package utils
 
 import (
 	"crypto/sha256"
-	"math/big"
+	"math"
 	"strconv"
 )
 
@@ -21,15 +21,20 @@ func GetHashDouble(visitorCode string, containerID int, suffix ...string) float6
 	if len(suffix) > 0 {
 		b = append(b, suffix[0]...)
 	}
+	return CalculateHash(b)
+}
 
+func CalculateHash(b []byte) float64 {
 	h := sha256.New()
 	h.Write(b)
-
-	z := new(big.Int).SetBytes(h.Sum(nil))
-	n1 := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
-
-	f1 := new(big.Float).SetInt(z)
-	f2 := new(big.Float).SetInt(n1)
-	f, _ := new(big.Float).Quo(f1, f2).Float64()
-	return f
+	b = h.Sum(nil)
+	parsedValue := uint64(b[7]) |
+		(uint64(b[6]) << 8) |
+		(uint64(b[5]) << 16) |
+		(uint64(b[4]) << 24) |
+		(uint64(b[3]) << 32) |
+		(uint64(b[2]) << 40) |
+		(uint64(b[1]) << 48) |
+		(uint64(b[0]) << 56)
+	return float64(parsedValue) / math.MaxUint64
 }

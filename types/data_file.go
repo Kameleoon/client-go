@@ -2,6 +2,7 @@ package types
 
 type DataFile interface {
 	CustomDataInfo() *CustomDataInfo
+	Holdout() *Experiment
 	Settings() Settings
 	GetFeatureFlags() map[string]FeatureFlag
 	GetOrderedFeatureFlags() []FeatureFlag

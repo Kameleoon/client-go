@@ -2,7 +2,6 @@ package configuration
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/Kameleoon/client-go/v3/errs"
 	"github.com/Kameleoon/client-go/v3/logging"
@@ -11,6 +10,7 @@ import (
 
 type DataFile struct {
 	customDataInfo                   *types.CustomDataInfo
+	holdout                          *types.Experiment
 	settings                         Settings
 	featureFlags                     map[string]*FeatureFlag
 	orderedFeatureFlags              []types.FeatureFlag
@@ -31,8 +31,7 @@ func (df DataFile) String() string {
 func NewDataFile(configuration Configuration, environment string) *DataFile {
 	logging.Debug("CALL: NewDataFile(configuration: %s, environment: %s)",
 		configuration, environment)
-	ffs := collectFeatureFlagsFromConfiguration(configuration)
-	orderedFFs := collectOrderedFeatureFlags(ffs)
+	ffs, orderedFFs := collectFeatureFlagsFromConfiguration(configuration)
 	featureFlagById, ruleBySegmentId, ruleInfoByExpId, variationById, experimentIdsWithJSOrCSSVariable :=
 		collectIndices(ffs)
 	cdi := configuration.CustomDataInfo
@@ -41,6 +40,7 @@ func NewDataFile(configuration Configuration, environment string) *DataFile {
 	}
 	dataFile := &DataFile{
 		customDataInfo:                   cdi,
+		holdout:                          configuration.Holdout,
 		settings:                         configuration.Settings,
 		featureFlags:                     ffs,
 		orderedFeatureFlags:              orderedFFs,
@@ -57,17 +57,26 @@ func NewDataFile(configuration Configuration, environment string) *DataFile {
 	return dataFile
 }
 
-func collectFeatureFlagsFromConfiguration(configuration Configuration) map[string]*FeatureFlag {
-	ffs := make(map[string]*FeatureFlag)
-	for i := len(configuration.FeatureFlags) - 1; i >= 0; i-- {
+func collectFeatureFlagsFromConfiguration(
+	configuration Configuration,
+) (ffs map[string]*FeatureFlag, ordered []types.FeatureFlag) {
+	n := len(configuration.FeatureFlags)
+	ffs = make(map[string]*FeatureFlag, n)
+	ordered = make([]types.FeatureFlag, n)
+	for i := 0; i < n; i++ {
 		ff := &configuration.FeatureFlags[i]
 		ffs[ff.FeatureKey] = ff
+		ordered[i] = ff
 	}
-	return ffs
+	return
 }
 
 func (df *DataFile) CustomDataInfo() *types.CustomDataInfo {
 	return df.customDataInfo
+}
+
+func (df *DataFile) Holdout() *types.Experiment {
+	return df.holdout
 }
 
 func (df *DataFile) Settings() types.Settings {
@@ -104,17 +113,6 @@ func (df *DataFile) GetFeatureFlags() map[string]types.FeatureFlag {
 
 func (df *DataFile) GetOrderedFeatureFlags() []types.FeatureFlag {
 	return df.orderedFeatureFlags
-}
-
-func collectOrderedFeatureFlags(ffs map[string]*FeatureFlag) []types.FeatureFlag {
-	ordered := make([]types.FeatureFlag, 0, len(ffs))
-	for _, ff := range ffs {
-		ordered = append(ordered, ff)
-	}
-	sort.Slice(ordered, func(i, j int) bool {
-		return ordered[i].GetId() < ordered[j].GetId()
-	})
-	return ordered
 }
 
 func (df *DataFile) HasAnyTargetedDeliveryRule() bool {
@@ -179,8 +177,8 @@ func collectIndices(featureFlags map[string]*FeatureFlag) (
 			// ruleInfoByExpId
 			ruleInfoByExpId[rulePtr.ExperimentId] = types.RuleInfo{FeatureFlag: ff, Rule: rulePtr}
 			// variationById
-			for iv := len(rulePtr.VariationByExposition) - 1; iv >= 0; iv-- {
-				variationPtr := &rulePtr.VariationByExposition[iv]
+			for iv := len(rulePtr.VariationsByExposition) - 1; iv >= 0; iv-- {
+				variationPtr := &rulePtr.VariationsByExposition[iv]
 				if variationPtr.VariationID != nil {
 					variationById[*variationPtr.VariationID] = variationPtr
 				}

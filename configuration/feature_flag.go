@@ -1,9 +1,10 @@
 package configuration
 
 import (
+	"fmt"
+
 	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/types"
-	"fmt"
 )
 
 type FeatureFlag struct {
@@ -34,16 +35,6 @@ func (ff *FeatureFlag) GetVariationByKey(key string) (*types.VariationFeatureFla
 	logging.Debug("RETURN: FeatureFlag.GetVariationByKey(key: %s) -> (variation: %s, exist: %s)",
 		key, variation, exist)
 	return variation, exist
-}
-
-func (ff *FeatureFlag) GetVariationKey(varByExp *types.VariationByExposition, rule types.Rule) string {
-	if varByExp != nil {
-		return varByExp.VariationKey
-	} else if rule != nil && rule.IsExperimentType() {
-		return string(types.VariationOff)
-	} else {
-		return ff.DefaultVariationKey
-	}
 }
 
 func (ff *FeatureFlag) GetId() int {

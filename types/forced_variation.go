@@ -4,23 +4,28 @@ import "fmt"
 
 // Base
 
-type ForcedVariation struct {
+type ForcedVariation interface {
+	Rule() Rule
+	VarByExp() *VariationByExposition
+}
+
+type forcedVariation struct {
 	rule     Rule
 	varByExp *VariationByExposition
 }
 
-func (fv *ForcedVariation) Rule() Rule {
+func (fv *forcedVariation) Rule() Rule {
 	return fv.rule
 }
 
-func (fv *ForcedVariation) VarByExp() *VariationByExposition {
+func (fv *forcedVariation) VarByExp() *VariationByExposition {
 	return fv.varByExp
 }
 
 // Feature
 
 type ForcedFeatureVariation struct {
-	ForcedVariation
+	forcedVariation
 	featureKey string
 	simulated  bool
 }
@@ -29,7 +34,7 @@ func NewForcedFeatureVariation(
 	featureKey string, rule Rule, varByExp *VariationByExposition, simulated bool,
 ) *ForcedFeatureVariation {
 	return &ForcedFeatureVariation{
-		ForcedVariation: ForcedVariation{rule: rule, varByExp: varByExp},
+		forcedVariation: forcedVariation{rule: rule, varByExp: varByExp},
 		featureKey:      featureKey,
 		simulated:       simulated,
 	}
@@ -57,7 +62,7 @@ func (ffv ForcedFeatureVariation) String() string {
 // Experiment
 
 type ForcedExperimentVariation struct {
-	ForcedVariation
+	forcedVariation
 	forceTargeting bool
 }
 
@@ -65,7 +70,7 @@ func NewForcedExperimentVariation(
 	rule Rule, varByExp *VariationByExposition, forceTargeting bool,
 ) *ForcedExperimentVariation {
 	return &ForcedExperimentVariation{
-		ForcedVariation: ForcedVariation{rule: rule, varByExp: varByExp},
+		forcedVariation: forcedVariation{rule: rule, varByExp: varByExp},
 		forceTargeting:  forceTargeting,
 	}
 }
