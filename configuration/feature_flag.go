@@ -14,11 +14,14 @@ type FeatureFlag struct {
 	DefaultVariationKey string                       `json:"defaultVariationKey"`
 	EnvironmentEnabled  bool                         `json:"environmentEnabled"`
 	Rules               []Rule                       `json:"rules"`
+	MEGroupName         string                       `json:"mutuallyExclusiveGroup"`
 }
 
 func (ff FeatureFlag) String() string {
-	return fmt.Sprintf("FeatureFlag{Id:%v,FeatureKey:'%v',EnvironmentEnabled:%v,DefaultVariationKey:'%v',Rules:%v}",
-		ff.Id, ff.FeatureKey, ff.EnvironmentEnabled, ff.DefaultVariationKey, len(ff.Rules))
+	return fmt.Sprintf(
+		"FeatureFlag{Id:%v,FeatureKey:'%v',EnvironmentEnabled:%v,DefaultVariationKey:'%v',Rules:%v,MEGroupName:'%v'}",
+		ff.Id, ff.FeatureKey, ff.EnvironmentEnabled, ff.DefaultVariationKey, len(ff.Rules), ff.MEGroupName,
+	)
 }
 
 func (ff *FeatureFlag) GetVariationByKey(key string) (*types.VariationFeatureFlag, bool) {
@@ -63,4 +66,8 @@ func (ff *FeatureFlag) GetRules() []types.Rule {
 		rules[i] = &ff.Rules[i]
 	}
 	return rules
+}
+
+func (ff *FeatureFlag) GetMEGroupName() string {
+	return ff.MEGroupName
 }

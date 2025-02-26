@@ -14,6 +14,7 @@ type DataFile struct {
 	settings                         Settings
 	featureFlags                     map[string]*FeatureFlag
 	orderedFeatureFlags              []types.FeatureFlag
+	meGroups                         map[string]types.MEGroup
 	environment                      string
 	hasAnyTDRule                     bool
 	featureFlagById                  map[int]types.FeatureFlag
@@ -44,6 +45,7 @@ func NewDataFile(configuration Configuration, environment string) *DataFile {
 		settings:                         configuration.Settings,
 		featureFlags:                     ffs,
 		orderedFeatureFlags:              orderedFFs,
+		meGroups:                         makeMEGroups(orderedFFs),
 		environment:                      environment,
 		hasAnyTDRule:                     detIfHasAnyTargetedDeliveryRule(ffs),
 		featureFlagById:                  featureFlagById,
@@ -113,6 +115,10 @@ func (df *DataFile) GetFeatureFlags() map[string]types.FeatureFlag {
 
 func (df *DataFile) GetOrderedFeatureFlags() []types.FeatureFlag {
 	return df.orderedFeatureFlags
+}
+
+func (df *DataFile) MEGroups() map[string]types.MEGroup {
+	return df.meGroups
 }
 
 func (df *DataFile) HasAnyTargetedDeliveryRule() bool {
@@ -204,4 +210,19 @@ func hasFeatureFlagVariableJsCss(featureFlag *FeatureFlag) bool {
 		}
 	}
 	return false
+}
+
+func makeMEGroups(featureFlags []types.FeatureFlag) map[string]types.MEGroup {
+	meGroupLists := make(map[string][]types.FeatureFlag)
+	for _, ff := range featureFlags {
+		meGroupName := ff.GetMEGroupName()
+		if meGroupName != "" {
+			meGroupLists[meGroupName] = append(meGroupLists[meGroupName], ff)
+		}
+	}
+	meGroups := make(map[string]types.MEGroup)
+	for meGroupName, meGroupList := range meGroupLists {
+		meGroups[meGroupName] = NewMEGroup(meGroupList)
+	}
+	return meGroups
 }

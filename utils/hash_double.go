@@ -24,6 +24,10 @@ func GetHashDouble(visitorCode string, containerID int, suffix ...string) float6
 	return CalculateHash(b)
 }
 
+func GetHashDoubleForMEGroup(visitorCode string, meGroupName string) float64 {
+	return CalculateHash([]byte(visitorCode + meGroupName))
+}
+
 func CalculateHash(b []byte) float64 {
 	h := sha256.New()
 	h.Write(b)

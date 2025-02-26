@@ -941,7 +941,8 @@ func (c *kameleoonClient) evaluate(
 	}
 	if forcedVariation != nil {
 		evalExp = newEvaluatedExperimentFromForcedVariation(forcedVariation)
-	} else if c.isVisitorNotInHoldout(visitor, visitorCode, track, save) {
+	} else if c.isVisitorNotInHoldout(visitor, visitorCode, track, save) &&
+		c.isFFUnrestrictedByMEGroup(visitor, visitorCode, featureFlag) {
 		evalExp = c.calculateVariationRuleForFeature(visitorCode, featureFlag)
 	}
 	if save && ((forcedVariation == nil) || !forcedVariation.Simulated()) {
@@ -954,27 +955,54 @@ func (c *kameleoonClient) evaluate(
 	return
 }
 
+func (c *kameleoonClient) isFFUnrestrictedByMEGroup(
+	visitor storage.Visitor, visitorCode string, featureFlag types.FeatureFlag,
+) bool {
+	meGroupName := featureFlag.GetMEGroupName()
+	if meGroupName == "" {
+		return true
+	}
+	logging.Debug(
+		"CALL: kameleoonClient.isFFUnrestrictedByMEGroup(visitor, visitorCode: %s, featureFlag: %s)",
+		visitorCode, featureFlag,
+	)
+	unrestricted := true
+	if meGroup := c.dataManager.DataFile().MEGroups()[meGroupName]; meGroup != nil {
+		codeForHash := getCodeForHash(visitor, visitorCode)
+		meGroupHash := utils.GetHashDoubleForMEGroup(codeForHash, meGroupName)
+		logging.Debug("Calculated ME group hash %s for code: %s, meGroup: %s", meGroupHash, codeForHash, meGroupName)
+		unrestricted = meGroup.GetFeatureFlagByHash(meGroupHash) == featureFlag
+	}
+	logging.Debug(
+		"RETURN: kameleoonClient.isFFUnrestrictedByMEGroup(visitor, visitorCode: %s, featureFlag: %s)"+
+			" -> (unrestricted: %s)", visitorCode, featureFlag, unrestricted,
+	)
+	return unrestricted
+}
+
 func (c *kameleoonClient) isVisitorNotInHoldout(visitor storage.Visitor, visitorCode string, track, save bool) bool {
+	holdout := c.dataManager.DataFile().Holdout()
+	if holdout == nil {
+		return true
+	}
 	const inHoldoutVariationKey = "in-holdout"
 	logging.Debug(
 		"CALL: kameleoonClient.isVisitorNotInHoldout(visitor, visitorCode: %s, track: %s, save: %s)",
 		visitorCode, track, save,
 	)
 	isNotInHoldout := true
-	if holdout := c.dataManager.DataFile().Holdout(); holdout != nil {
-		codeForHash := getCodeForHash(visitor, visitorCode)
-		variationHash := utils.GetHashDouble(codeForHash, holdout.ExperimentId)
-		logging.Debug("Calculated holdout hash %s for code %s", variationHash, codeForHash)
-		if varByExp := holdout.GetVariationByHash(variationHash); varByExp != nil {
-			isNotInHoldout = varByExp.VariationKey != inHoldoutVariationKey
-			if save {
-				evalExp := &evaluatedExperiment{
-					varByExp:   varByExp,
-					experiment: holdout,
-					ruleType:   types.RuleTypeExperimentation,
-				}
-				c.saveVariation(visitorCode, evalExp, track)
+	codeForHash := getCodeForHash(visitor, visitorCode)
+	variationHash := utils.GetHashDouble(codeForHash, holdout.ExperimentId)
+	logging.Debug("Calculated holdout hash %s for code %s", variationHash, codeForHash)
+	if varByExp := holdout.GetVariationByHash(variationHash); varByExp != nil {
+		isNotInHoldout = varByExp.VariationKey != inHoldoutVariationKey
+		if save {
+			evalExp := &evaluatedExperiment{
+				varByExp:   varByExp,
+				experiment: holdout,
+				ruleType:   types.RuleTypeExperimentation,
 			}
+			c.saveVariation(visitorCode, evalExp, track)
 		}
 	}
 	logging.Debug(

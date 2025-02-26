@@ -7,6 +7,7 @@ type DataFile interface {
 	GetFeatureFlags() map[string]FeatureFlag
 	GetOrderedFeatureFlags() []FeatureFlag
 	GetFeatureFlag(featureKey string) (FeatureFlag, error)
+	MEGroups() map[string]MEGroup
 
 	HasAnyTargetedDeliveryRule() bool
 	GetFeatureFlagById(featureFlagId int) FeatureFlag

@@ -8,4 +8,5 @@ type FeatureFlag interface {
 	GetDefaultVariationKey() string
 	GetEnvironmentEnabled() bool
 	GetRules() []Rule
+	GetMEGroupName() string
 }
