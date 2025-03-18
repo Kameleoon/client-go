@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 ## 3.10.0 - 2025-03-18
 ### Features
 * Added support for Contextual Bandit evaluations. Calling [`GetRemoteVisitorData`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getremotevisitordata) with the `cbs=true` flag is required for this feature to function correctly. Platform-wide release expected in March 2025.
-* Added new configuration parameter `networkDomain` (`network_domain`) to [`KameleoonClientConfig`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#create) and the [configuration](https://developers.kameleoon.com/go-sdk.html#additional-configuration) file. This parameter allows specifying a custom domain for all outgoing network requests.
+* Added new configuration parameter `NetworkDomain` (`network_domain`) to [`KameleoonClientConfig`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#create) and the [configuration](https://developers.kameleoon.com/go-sdk.html#additional-configuration) file. This parameter allows specifying a custom domain for all outgoing network requests.
 * Added support for new conditions:
     - Exclusive Campaign
     - Experiment
