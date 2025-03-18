@@ -102,13 +102,15 @@ func (nm *NetworkManagerImpl) makeCall(request *Request, attemptCount int, retry
 	nm.ensureTimeout(request)
 	var err error
 	var isTokenRejected bool
+	var response Response
 	for i := 0; i < attemptCount; i++ {
+		logLevel := nm.getLogLevel(i, attemptCount)
 		if (i > 0) && (retryDelay > 0) {
 			time.Sleep(retryDelay)
 		}
 		nm.authorizeIfRequired(request)
-		response := nm.NetProvider.Call(request)
-		if isTokenRejected, err = nm.processErrors(request, &response); err == nil {
+		response = nm.NetProvider.Call(request)
+		if isTokenRejected, err = nm.processErrors(request, &response, logLevel); err == nil {
 			logging.Debug("Fetched response %s for request %s", response, request)
 			return response.Body, nil
 		}
@@ -116,14 +118,20 @@ func (nm *NetworkManagerImpl) makeCall(request *Request, attemptCount int, retry
 	if isTokenRejected {
 		logging.Error("Wrong Kameleoon API access token slows down the SDK's requests")
 		request.AccessToken = ""
-		response := nm.NetProvider.Call(request)
-		if _, err = nm.processErrors(request, &response); err == nil {
+		response = nm.NetProvider.Call(request)
+		if _, err = nm.processErrors(request, &response, logging.ERROR); err == nil {
 			logging.Debug("Fetched response %s for request %s", response, request)
 			return response.Body, nil
 		}
 	}
-	logging.Error("%s call %s failed: %s", request.Method, request.Url, err)
 	return nil, err
+}
+
+func (nm *NetworkManagerImpl) getLogLevel(attempt int, attemptCount int) logging.LogLevel {
+	if attempt == attemptCount-1 {
+		return logging.ERROR
+	}
+	return logging.WARNING
 }
 
 func (nm *NetworkManagerImpl) authorizeIfRequired(request *Request) {
@@ -132,19 +140,19 @@ func (nm *NetworkManagerImpl) authorizeIfRequired(request *Request) {
 	}
 }
 
-func (nm *NetworkManagerImpl) processErrors(request *Request, response *Response) (bool, error) {
+func (nm *NetworkManagerImpl) processErrors(request *Request, response *Response, logLevel logging.LogLevel) (bool, error) {
 	var err error
 	var isTokenRejected bool
 	if response.Err != nil {
 		err = response.Err
-		logging.Warning("%s call '%s' failed: Error occurred during request: %s",
+		logging.Log(logLevel, "%s call '%s' failed: Error occurred during request: %s",
 			request.Method, request.Url, err)
 	} else if !response.IsExpectedStatusCode() {
-		err = errs.NewUnexpectedStatusCode(response.Code)
-		logging.Warning("%s call '%s' failed: Received unexpected status code %s",
-			request.Method, request.Url, response.Code)
+		err = errs.NewUnexpectedStatusCode(response.Code, response.Body)
+		logging.Log(logLevel, "%s call '%s' failed: Received unexpected status code: %s, body: %s",
+			request.Method, request.Url, response.Code, string(response.Body[:]))
 		if (response.Code == codeUnauthorized) && (request.AccessToken != "") {
-			logging.Warning("Unexpected rejection of access token %s", request.AccessToken)
+			logging.Log(logLevel, "Unexpected rejection of access token %s", request.AccessToken)
 			nm.accessTokenSource.DiscardToken(request.AccessToken)
 			isTokenRejected = true
 		}

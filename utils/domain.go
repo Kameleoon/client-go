@@ -19,16 +19,7 @@ func ValidateTopLevelDomain(topLevelDomain string) string {
 		return ""
 	}
 
-	topLevelDomain = strings.ToLower(topLevelDomain)
-
-	protocols := []string{HTTP, HTTPS}
-	for _, protocol := range protocols {
-		if strings.HasPrefix(topLevelDomain, protocol) {
-			topLevelDomain = strings.TrimPrefix(topLevelDomain, protocol)
-			logging.Warning("The top-level domain contains %s. Domain after protocol trimming: %s", protocol, topLevelDomain)
-			break
-		}
-	}
+	topLevelDomain = checkAndTrimProtocol(strings.ToLower(topLevelDomain))
 
 	matched, err := regexp.MatchString(REGEX_DOMAIN, topLevelDomain)
 	if err != nil {
@@ -45,4 +36,40 @@ func ValidateTopLevelDomain(topLevelDomain string) string {
 	}
 
 	return topLevelDomain
+}
+
+func ValidateNetworkDomain(networkDomain string) string {
+	if networkDomain == "" {
+		return ""
+	}
+
+	networkDomain = checkAndTrimProtocol(strings.ToLower(networkDomain))
+
+	// replace first and last dot
+	networkDomain = strings.Trim(networkDomain, ".")
+
+	matched, err := regexp.MatchString(REGEX_DOMAIN, networkDomain)
+	if err != nil {
+		logging.Error("Error compiling regex: %v", err)
+		return ""
+	}
+
+	if !matched && networkDomain != LOCALHOST {
+		logging.Error("The network domain %s is invalid.", networkDomain)
+		return ""
+	}
+
+	return networkDomain
+}
+
+func checkAndTrimProtocol(domain string) string {
+	protocols := []string{HTTP, HTTPS}
+	for _, protocol := range protocols {
+		if strings.HasPrefix(domain, protocol) {
+			domain = strings.TrimPrefix(domain, protocol)
+			logging.Warning("The domain contains %s. Domain after protocol trimming: %s", protocol, domain)
+			return domain
+		}
+	}
+	return domain
 }

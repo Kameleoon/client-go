@@ -75,6 +75,10 @@ type targetingCondition struct {
 	KeyMomentId        int                  `json:"keyMomentId,omitempty"`
 	LowerBound         float64              `json:"lowerBound,omitempty"`
 	UpperBound         float64              `json:"upperBound,omitempty"`
+	PersonalizationId  int                  `json:"personalizationId,omitempty"`
+	CampaignType       string               `json:"campaignType,omitempty"`
+	VariationId        int                  `json:"variationId,omitempty"`
+	ExperimentId       int                  `json:"experimentId,omitempty"`
 }
 
 type TargetingCondition targetingCondition
@@ -82,6 +86,9 @@ type TargetingCondition targetingCondition
 const (
 	UndefinedCountInMillisValue = -1
 	UndefinedVisitCountValue    = -1
+	UndefinedPersonalizationId  = -1
+	UndefinedVariationId        = -1
+	UndefinedExperimentId       = -1
 )
 
 func (c *TargetingCondition) UnmarshalJSON(data []byte) error {
@@ -89,6 +96,9 @@ func (c *TargetingCondition) UnmarshalJSON(data []byte) error {
 	c.PageCount = math.MaxInt
 	c.CountInMillis = UndefinedCountInMillisValue
 	c.VisitCount = UndefinedVisitCountValue
+	c.PersonalizationId = UndefinedPersonalizationId
+	c.VariationId = UndefinedVariationId
+	c.ExperimentId = UndefinedExperimentId
 	return json.Unmarshal(data, (*targetingCondition)(c))
 }
 

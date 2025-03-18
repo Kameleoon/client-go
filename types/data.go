@@ -22,6 +22,7 @@ const (
 	DataTypeDevice                    DataType = "DEVICE"
 	DataTypePageView                  DataType = "PAGE_VIEW"
 	DataTypePageViewVisit             DataType = "PAGE_VIEW_VISIT"
+	DataTypePersonalization           DataType = "PERSONALIZATION"
 	DataTypeUserAgent                 DataType = "USER_AGENT"
 	DataTypeCookie                    DataType = "COOKIE"
 	DataTypeGeolocation               DataType = "GEOLOCATION"
@@ -29,4 +30,5 @@ const (
 	DataTypeVisitorVisits             DataType = "VISITOR_VISITS"
 	DataTypeKcsHeat                   DataType = "KCS_HEAT"
 	DataTypeUniqueIdentifier          DataType = "UNIQUE_IDENTIFIER"
+	DataTypeCBScores                  DataType = "CBS"
 )

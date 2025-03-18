@@ -347,7 +347,7 @@ func newClient(siteCode string, cfg *KameleoonClientConfig) (*kameleoonClient, e
 	dm := data.NewDataManagerImpl(df)
 	np := network.NewNetProviderImpl(cfg.Network.ReadTimeout, cfg.Network.WriteTimeout,
 		cfg.Network.MaxConnsPerHost, cfg.Network.ProxyURL)
-	up := network.NewUrlProviderImpl(siteCode, network.DefaultDataApiDomain, utils.SdkName, utils.SdkVersion)
+	up := network.NewUrlProviderImpl(siteCode, cfg.NetworkDomain, utils.SdkName, utils.SdkVersion)
 	atsf := &network.AccessTokenSourceFactoryImpl{ClientId: cfg.ClientID, ClientSecret: cfg.ClientSecret}
 	nm := network.NewNetworkManagerImpl(cfg.Environment, cfg.DefaultTimeout, np, up, atsf)
 	vm := newVisitorManager(dm, cfg)
@@ -646,10 +646,60 @@ func getCodeForHash(visitor storage.Visitor, visitorCode string) string {
 	return visitorCode
 }
 
+func (c *kameleoonClient) evaluateCBScores(
+	visitor storage.Visitor, visitorCode string, rule types.Rule,
+) *evaluatedExperiment {
+	if (visitor == nil) || (visitor.CBScores() == nil) {
+		return nil
+	}
+	logging.Debug(
+		"CALL: kameleoonClient.evaluateCBScores(visitor, visitorCode: %s, rule: %s)",
+		visitorCode, rule,
+	)
+	var evalExp *evaluatedExperiment
+	ruleVarsByExp := rule.GetRuleBase().VariationsByExposition
+	if varIdGroupByScores, ok := visitor.CBScores().Values()[rule.GetRuleBase().ExperimentId]; ok {
+		var varByExpInCbs []*types.VariationByExposition
+		for _, varGroup := range varIdGroupByScores {
+			// Finding varByExps which exist in CBS variation IDs
+			varByExpInCbs = make([]*types.VariationByExposition, 0, len(ruleVarsByExp))
+			for i := 0; i < len(ruleVarsByExp); i++ {
+				if (ruleVarsByExp[i].VariationID != nil) &&
+					utils.SliceContains(varGroup.Ids(), *ruleVarsByExp[i].VariationID) {
+					varByExpInCbs = append(varByExpInCbs, &ruleVarsByExp[i])
+				}
+			}
+			if len(varByExpInCbs) > 0 { // Skiping if not found any varByExp
+				break // We need take only one list with the highest scores
+			}
+		}
+		if len(varByExpInCbs) > 0 {
+			var idx int
+			if len(varByExpInCbs) > 1 { // if more than one varByExp for score -> randomly get
+				codeForHash := getCodeForHash(visitor, visitorCode)
+				variationHash := utils.ObtainHashRule(
+					codeForHash, rule.GetRuleBase().ExperimentId, rule.GetRuleBase().RespoolTime,
+				)
+				logging.Debug("Calculated CBS hash %s for code %s", variationHash, codeForHash)
+				idx = int(variationHash * float64(len(varByExpInCbs)))
+				if idx >= len(varByExpInCbs) {
+					idx = len(varByExpInCbs) - 1
+				}
+			}
+			evalExp = newEvaluatedExperimentFromVarByExpRule(varByExpInCbs[idx], rule)
+		}
+	}
+	logging.Debug(
+		"RETURN: kameleoonClient.evaluateCBScores(visitor, visitorCode: %s, rule: %s) -> (evalExp: %s)",
+		visitorCode, rule, evalExp,
+	)
+	return evalExp
+}
+
 // getVariationRuleForFeature is a helper method for calculate variation key for feature flag
 func (c *kameleoonClient) calculateVariationRuleForFeature(
 	visitorCode string, featureFlag types.FeatureFlag,
-) (selected *evaluatedExperiment) {
+) (evalExp *evaluatedExperiment) {
 	logging.Debug(
 		"CALL: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)",
 		visitorCode, featureFlag,
@@ -658,7 +708,7 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 		logging.Debug(
 			"RETURN: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)"+
 				" -> (evalExp: %s)",
-			visitorCode, featureFlag, selected,
+			visitorCode, featureFlag, evalExp,
 		)
 	}()
 	visitor := c.visitorManager.GetVisitor(visitorCode)
@@ -688,10 +738,14 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 			// }
 
 			//uses for rule exposition
-			hashRule := utils.GetHashDoubleRule(codeForHash, rule.GetRuleBase().Id, rule.GetRuleBase().RespoolTime)
+			hashRule := utils.ObtainHashRule(codeForHash, rule.GetRuleBase().Id, rule.GetRuleBase().RespoolTime)
 			logging.Debug("Calculated rule hash %s for code %s", hashRule, codeForHash)
 			//check main expostion for rule with hashRule
 			if hashRule <= rule.GetRuleBase().Exposition {
+				// check main exposition for rule with hashRule
+				if evalExp = c.evaluateCBScores(visitor, visitorCode, rule); evalExp != nil {
+					return
+				}
 				if rule.IsTargetDeliveryType() {
 					var variation *types.VariationByExposition
 					if len(rule.GetRuleBase().VariationsByExposition) > 0 {
@@ -700,7 +754,7 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 					return newEvaluatedExperimentFromVarByExpRule(variation, rule)
 				}
 				//uses for variation's expositions
-				hashVariation := utils.GetHashDoubleRule(
+				hashVariation := utils.ObtainHashRule(
 					codeForHash, rule.GetRuleBase().ExperimentId, rule.GetRuleBase().RespoolTime,
 				)
 				logging.Debug("Calculated variation hash %s for code %s", hashVariation, codeForHash)
@@ -969,7 +1023,7 @@ func (c *kameleoonClient) isFFUnrestrictedByMEGroup(
 	unrestricted := true
 	if meGroup := c.dataManager.DataFile().MEGroups()[meGroupName]; meGroup != nil {
 		codeForHash := getCodeForHash(visitor, visitorCode)
-		meGroupHash := utils.GetHashDoubleForMEGroup(codeForHash, meGroupName)
+		meGroupHash := utils.ObtainHashForMEGroup(codeForHash, meGroupName)
 		logging.Debug("Calculated ME group hash %s for code: %s, meGroup: %s", meGroupHash, codeForHash, meGroupName)
 		unrestricted = meGroup.GetFeatureFlagByHash(meGroupHash) == featureFlag
 	}
@@ -992,7 +1046,7 @@ func (c *kameleoonClient) isVisitorNotInHoldout(visitor storage.Visitor, visitor
 	)
 	isNotInHoldout := true
 	codeForHash := getCodeForHash(visitor, visitorCode)
-	variationHash := utils.GetHashDouble(codeForHash, holdout.ExperimentId)
+	variationHash := utils.ObtainHash(codeForHash, holdout.ExperimentId)
 	logging.Debug("Calculated holdout hash %s for code %s", variationHash, codeForHash)
 	if varByExp := holdout.GetVariationByHash(variationHash); varByExp != nil {
 		isNotInHoldout = varByExp.VariationKey != inHoldoutVariationKey

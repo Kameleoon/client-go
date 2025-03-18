@@ -20,6 +20,15 @@ func Contains(s []interface{}, str string) bool {
 	return false
 }
 
+func SliceContains[T comparable](s []T, x T) bool {
+	for _, v := range s {
+		if v == x {
+			return true
+		}
+	}
+	return false
+}
+
 func Map(array []interface{}, f func(interface{}) interface{}) []interface{} {
 	mapArray := make([]interface{}, len(array))
 	for i, v := range array {

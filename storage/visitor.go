@@ -29,11 +29,13 @@ type Visitor interface {
 	OperatingSystem() *types.OperatingSystem
 	Geolocation() *types.Geolocation
 	KcsHeat() *types.KcsHeat
+	CBScores() *types.CBScores
 	VisitorVisits() *types.VisitorVisits
 	CustomData() DataMapStorage[int, types.ICustomData]
 	PageViewVisits() DataMapStorage[string, types.PageViewVisit]
 	Conversions() DataCollectionStorage[*types.Conversion]
 	Variations() DataMapStorage[int, *types.AssignedVariation]
+	Personalizations() DataMapStorage[int, *types.Personalization]
 
 	AddData(data ...types.Data)
 	AddBaseData(overwrite bool, data ...types.BaseData)
@@ -120,33 +122,45 @@ func (v *VisitorImpl) UserAgent() string {
 }
 
 func (v *VisitorImpl) Device() *types.Device {
-	logging.Debug("CALL/RETURN: VisitorImpl.Device() -> (device: %s)", v.data.device)
-	return v.data.device
+	d := v.data.device
+	logging.Debug("CALL/RETURN: VisitorImpl.Device() -> (device: %s)", d)
+	return d
 }
 
 func (v *VisitorImpl) Browser() *types.Browser {
-	logging.Debug("CALL/RETURN: VisitorImpl.Browser() -> (browser: %s)", v.data.browser)
-	return v.data.browser
+	b := v.data.browser
+	logging.Debug("CALL/RETURN: VisitorImpl.Browser() -> (browser: %s)", b)
+	return b
 }
 
 func (v *VisitorImpl) Cookie() *types.Cookie {
-	logging.Debug("CALL/RETURN: VisitorImpl.Cookie() -> (cookie: %s)", v.data.cookie)
-	return v.data.cookie
+	c := v.data.cookie
+	logging.Debug("CALL/RETURN: VisitorImpl.Cookie() -> (cookie: %s)", c)
+	return c
 }
 
 func (v *VisitorImpl) OperatingSystem() *types.OperatingSystem {
-	logging.Debug("CALL/RETURN: VisitorImpl.OperatingSystem() -> (operatingSystem: %s)", v.data.operatingSystem)
-	return v.data.operatingSystem
+	os := v.data.operatingSystem
+	logging.Debug("CALL/RETURN: VisitorImpl.OperatingSystem() -> (operatingSystem: %s)", os)
+	return os
 }
 
 func (v *VisitorImpl) Geolocation() *types.Geolocation {
-	logging.Debug("CALL/RETURN: VisitorImpl.Geolocation() -> (geolocation: %s)", v.data.geolocation)
-	return v.data.geolocation
+	g := v.data.geolocation
+	logging.Debug("CALL/RETURN: VisitorImpl.Geolocation() -> (geolocation: %s)", g)
+	return g
 }
 
 func (v *VisitorImpl) KcsHeat() *types.KcsHeat {
-	logging.Debug("CALL/RETURN: VisitorImpl.KcsHeat() -> (kcsHeat: %s)", v.data.kcsHeat)
-	return v.data.kcsHeat
+	kcs := v.data.kcsHeat
+	logging.Debug("CALL/RETURN: VisitorImpl.KcsHeat() -> (kcsHeat: %s)", kcs)
+	return kcs
+}
+
+func (v *VisitorImpl) CBScores() *types.CBScores {
+	cbs := v.data.cbscores
+	logging.Debug("CALL/RETURN: VisitorImpl.CBScores() -> (cbs: %s)", cbs)
+	return cbs
 }
 
 func (v *VisitorImpl) VisitorVisits() *types.VisitorVisits {
@@ -179,6 +193,13 @@ func (v *VisitorImpl) Variations() DataMapStorage[int, *types.AssignedVariation]
 	logging.Debug("CALL: VisitorImpl.Variations()")
 	storage := NewDataMapStorageImpl(&v.data.mx, &v.data.variations)
 	logging.Debug("RETURN: VisitorImpl.Variations() -> (variations: %s)", storage)
+	return storage
+}
+
+func (v *VisitorImpl) Personalizations() DataMapStorage[int, *types.Personalization] {
+	logging.Debug("CALL: VisitorImpl.Personalizations()")
+	storage := NewDataMapStorageImpl(&v.data.mx, &v.data.personalizations)
+	logging.Debug("RETURN: VisitorImpl.Personalizations() -> (personalizations: %s)", storage)
 	return storage
 }
 
@@ -270,6 +291,8 @@ func (v *VisitorImpl) addData(overwrite bool, data types.BaseData) {
 		v.data.addGeolocation(data, overwrite)
 	case types.DataTypeKcsHeat:
 		v.data.addKcsHeat(data)
+	case types.DataTypeCBScores:
+		v.data.addCBScores(data, overwrite)
 	case types.DataTypeVisitorVisits:
 		v.data.addVisitorVisits(data)
 	case types.DataTypeCustom:
@@ -282,6 +305,8 @@ func (v *VisitorImpl) addData(overwrite bool, data types.BaseData) {
 		v.data.addConversion(data)
 	case types.DataTypeAssignedVariation:
 		v.data.addVariation(data, overwrite)
+	case types.DataTypePersonalization:
+		v.data.addPersonalization(data, overwrite)
 	case types.DataTypeForcedFeatureVariation:
 		v.data.addForcedFeatureVariation(data)
 	case types.DataTypeForcedExperimentVariation:
@@ -322,11 +347,13 @@ type visitorData struct {
 	operatingSystem     *types.OperatingSystem
 	geolocation         *types.Geolocation
 	kcsHeat             *types.KcsHeat
+	cbscores            *types.CBScores
 	visitorVisits       *types.VisitorVisits
 	customDataMap       map[int]types.ICustomData
 	pageViewVisits      map[string]types.PageViewVisit
 	conversions         []*types.Conversion
 	variations          map[int]*types.AssignedVariation
+	personalizations    map[int]*types.Personalization
 	forcedVariations    map[int]*types.ForcedExperimentVariation
 	simulatedVariations map[string]*types.ForcedFeatureVariation
 }
@@ -421,6 +448,11 @@ func (vd *visitorData) addKcsHeat(data types.BaseData) {
 		vd.kcsHeat = kh
 	}
 }
+func (vd *visitorData) addCBScores(data types.BaseData, overwrite bool) {
+	if cbs, ok := data.(*types.CBScores); ok && (overwrite || (vd.cbscores == nil)) {
+		vd.cbscores = cbs
+	}
+}
 func (vd *visitorData) addVisitorVisits(data types.BaseData) {
 	if vv, ok := data.(*types.VisitorVisits); ok {
 		vd.visitorVisits = vv
@@ -471,6 +503,16 @@ func (vd *visitorData) addConversion(data types.BaseData) {
 func (vd *visitorData) addVariation(data types.BaseData, overwrite bool) {
 	if av, ok := data.(*types.AssignedVariation); ok {
 		vd.assignVariation(av, overwrite)
+	}
+}
+func (vd *visitorData) addPersonalization(data types.BaseData, overwrite bool) {
+	if p, ok := data.(*types.Personalization); ok {
+		if overwrite || (vd.personalizations[p.Id()] == nil) {
+			if vd.personalizations == nil {
+				vd.personalizations = make(map[int]*types.Personalization, 1)
+			}
+			vd.personalizations[p.Id()] = p
+		}
 	}
 }
 func (vd *visitorData) addForcedFeatureVariation(data types.BaseData) {

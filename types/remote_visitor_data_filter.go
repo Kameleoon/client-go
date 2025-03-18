@@ -20,6 +20,8 @@ type RemoteVisitorDataFilter struct {
 	Experiments         bool
 	Kcs                 bool
 	VisitorCode         interface{} // Type: `bool`. Defaults to `true` if not set.
+	Personalization     bool
+	Cbs                 bool
 }
 
 func DefaultRemoteVisitorDataFilter() RemoteVisitorDataFilter {
@@ -43,7 +45,8 @@ func (r *RemoteVisitorDataFilter) ApplyDefaultValues() {
 func (r RemoteVisitorDataFilter) String() string {
 	return fmt.Sprintf(
 		"RemoteVisitorDataFilter{PreviousVisitAmount:%d,CurrentVisit:%t,CustomData:%t,PageViews:%t,Geolocation:%t,"+
-			"Device:%t,Browser:%t,OperatingSystem:%t,Conversions:%t,Experiments:%t,Kcs:%t,VisitorCode:%t}",
+			"Device:%t,Browser:%t,OperatingSystem:%t,Conversions:%t,Experiments:%t,Kcs:%t,VisitorCode:%t,"+
+			"Personalization:%t,Cbs:%t}",
 		r.PreviousVisitAmount,
 		r.CurrentVisit,
 		r.CustomData,
@@ -56,5 +59,7 @@ func (r RemoteVisitorDataFilter) String() string {
 		r.Experiments,
 		r.Kcs,
 		r.VisitorCode,
+		r.Personalization,
+		r.Cbs,
 	)
 }

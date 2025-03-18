@@ -12,12 +12,14 @@ type remoteVisitorData struct {
 	pageViewVisits        map[string]types.PageViewVisit
 	conversions           []*types.Conversion
 	experiments           map[int]*types.AssignedVariation
+	personalizations      map[int]*types.Personalization
 	device                *types.Device
 	browser               *types.Browser
 	operatingSystem       *types.OperatingSystem
 	geolocation           *types.Geolocation
 	previousVisitorVisits *types.VisitorVisits
 	kcsHeat               *types.KcsHeat
+	cbs                   *types.CBScores
 	visitorCode           string
 }
 
@@ -91,6 +93,9 @@ func (rvd *remoteVisitorData) CollectDataToAdd() []types.BaseData {
 	for _, av := range rvd.experiments {
 		dataList = append(dataList, av)
 	}
+	for _, p := range rvd.personalizations {
+		dataList = append(dataList, p)
+	}
 	if rvd.device != nil {
 		dataList = append(dataList, rvd.device)
 	}
@@ -109,6 +114,9 @@ func (rvd *remoteVisitorData) CollectDataToAdd() []types.BaseData {
 	if rvd.kcsHeat != nil {
 		dataList = append(dataList, rvd.kcsHeat)
 	}
+	if rvd.cbs != nil {
+		dataList = append(dataList, rvd.cbs)
+	}
 	return dataList
 }
 
@@ -121,6 +129,7 @@ func (rvd *remoteVisitorData) UnmarshalJSON(data []byte) error {
 	rvd.pageViewVisits = make(map[string]types.PageViewVisit)
 	rvd.conversions = []*types.Conversion{}
 	rvd.experiments = make(map[int]*types.AssignedVariation)
+	rvd.personalizations = make(map[int]*types.Personalization)
 	rvd.device = nil
 	rvd.browser = nil
 	rvd.operatingSystem = nil
@@ -128,6 +137,7 @@ func (rvd *remoteVisitorData) UnmarshalJSON(data []byte) error {
 	rvd.parseCurrentVisit(m)
 	rvd.parsePreviousVisits(m)
 	rvd.parseKcsHeat(m)
+	rvd.parseCBScores(m)
 	return nil
 }
 
@@ -159,6 +169,7 @@ func (rvd *remoteVisitorData) parseVisit(v *visitModel /*non-nil*/) {
 	rvd.parseCustomData(v.CustomDataEvents)
 	rvd.parsePages(v.PageEvents)
 	rvd.parseExperiments(v.ExperimentEvents)
+	rvd.parsePersonalizations(v.PersonalizationEvents)
 	rvd.parseConversions(v.ConversionEvents)
 	rvd.parseGeolocation(v.GeolocationEvents)
 	rvd.parseStaticData(v.StaticDataEvent)
@@ -219,6 +230,18 @@ func (rvd *remoteVisitorData) parseExperiments(experimentEvents []*dataEventMode
 	}
 }
 
+func (rvd *remoteVisitorData) parsePersonalizations(personalizationEvents []*dataEventModel[personalizationDataModel]) {
+	for i := len(personalizationEvents) - 1; i >= 0; i-- {
+		event := personalizationEvents[i]
+		if (event == nil) || (event.Data == nil) {
+			continue
+		}
+		if _, contains := rvd.personalizations[event.Data.Id]; !contains {
+			rvd.personalizations[event.Data.Id] = types.NewPersonalization(event.Data.Id, event.Data.VariationId)
+		}
+	}
+}
+
 func (rvd *remoteVisitorData) parseConversions(conversionEvents []*dataEventModel[conversionDataModel]) {
 	for _, event := range conversionEvents {
 		if (event == nil) || (event.Data == nil) {
@@ -268,21 +291,39 @@ func (rvd *remoteVisitorData) parseKcsHeat(m *remoteVisitorDataModel) {
 	}
 }
 
+func (rvd *remoteVisitorData) parseCBScores(m *remoteVisitorDataModel) {
+	if m.Cbs != nil {
+		cbsMap := make(map[int][]types.ScoredVarId)
+		for experimentId, scoredVarEntries := range m.Cbs {
+			entries := make([]types.ScoredVarId, 0, len(scoredVarEntries))
+			for varId, score := range scoredVarEntries {
+				entries = append(entries, types.ScoredVarId{VariationId: varId, Score: score})
+			}
+			cbsMap[experimentId] = entries
+		}
+		rvd.cbs = types.NewCBScores(cbsMap)
+	} else {
+		rvd.cbs = nil
+	}
+}
+
 type remoteVisitorDataModel struct {
 	CurrentVisit   *visitModel             `json:"currentVisit"`
 	PreviousVisits []*visitModel           `json:"previousVisits"`
 	Kcs            map[int]map[int]float64 `json:"kcs"`
+	Cbs            map[int]map[int]float64 `json:"cbs"`
 }
 
 type visitModel struct {
-	TimeStarted       int64                                   `json:"timeStarted"`
-	VisitorCode       string                                  `json:"visitorCode"`
-	CustomDataEvents  []*dataEventModel[customDataModel]      `json:"customDataEvents"`
-	PageEvents        []*dataEventModel[pageDataModel]        `json:"pageEvents"`
-	ExperimentEvents  []*dataEventModel[experimentDataModel]  `json:"experimentEvents"`
-	ConversionEvents  []*dataEventModel[conversionDataModel]  `json:"conversionEvents"`
-	GeolocationEvents []*dataEventModel[geolocationDataModel] `json:"geolocationEvents"`
-	StaticDataEvent   *dataEventModel[staticDataModel]        `json:"staticDataEvent"`
+	TimeStarted           int64                                       `json:"timeStarted"`
+	VisitorCode           string                                      `json:"visitorCode"`
+	CustomDataEvents      []*dataEventModel[customDataModel]          `json:"customDataEvents"`
+	PageEvents            []*dataEventModel[pageDataModel]            `json:"pageEvents"`
+	ExperimentEvents      []*dataEventModel[experimentDataModel]      `json:"experimentEvents"`
+	PersonalizationEvents []*dataEventModel[personalizationDataModel] `json:"personalizationEvents"`
+	ConversionEvents      []*dataEventModel[conversionDataModel]      `json:"conversionEvents"`
+	GeolocationEvents     []*dataEventModel[geolocationDataModel]     `json:"geolocationEvents"`
+	StaticDataEvent       *dataEventModel[staticDataModel]            `json:"staticDataEvent"`
 }
 
 type dataEventModel[D any] struct {
@@ -303,6 +344,11 @@ type pageDataModel struct {
 type experimentDataModel struct {
 	ExperimentId int `json:"id"`
 	VariationId  int `json:"variationId"`
+}
+
+type personalizationDataModel struct {
+	Id          int `json:"id"`
+	VariationId int `json:"variationId"`
 }
 
 type conversionDataModel struct {

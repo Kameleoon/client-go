@@ -191,8 +191,14 @@ func getCondition(c types.TargetingCondition) types.Condition {
 		return conditions.NewConversionCondition(c)
 	case types.TargetingTargetFeatureFlag:
 		return conditions.NewTargetFeatureFlagCondition(c)
+	case types.TargetingTargetExperiment:
+		return conditions.NewTargetExperimentCondition(c)
+	case types.TargetingTargetPersonalization:
+		return conditions.NewTargetPersonalizationCondition(c)
 	case types.TargetingExclusiveFeatureFlag:
 		return conditions.NewExclusiveFeatureFlagCondition(c)
+	case types.TargetingExclusiveExperiment:
+		return conditions.NewExclusiveExperimentCondition(c)
 	case types.TargetingCookie:
 		return conditions.NewCookieCondition(c)
 	case types.TargetingGeolocation:

@@ -17,6 +17,8 @@ const (
 	DefaultRequestTimeout   = 10 * time.Second
 	DefaultSessionDuration  = 30 * time.Minute
 	DefaultEnvironment      = ""
+	DefaultTopLevelDomain   = ""
+	DefaultNetworkDomain    = ""
 	DefaultTrackingInterval = time.Second
 	MinTrackingInterval     = time.Millisecond * 100
 	MaxTrackingInterval     = time.Second
@@ -38,6 +40,7 @@ type KameleoonClientConfig struct {
 	SessionDuration  time.Duration  `yml:"session_duration" yaml:"session_duration" default:"30m"`
 	TopLevelDomain   string         `yml:"top_level_domain" yaml:"top_level_domain"`
 	Environment      string         `yml:"environment" yaml:"environment"`
+	NetworkDomain    string         `yml:"network_domain" yaml:"network_domain"`
 }
 
 func LoadConfig(path string) (*KameleoonClientConfig, error) {
@@ -98,6 +101,7 @@ func (c *KameleoonClientConfig) defaults() error {
 	if len(c.Environment) == 0 {
 		c.Environment = DefaultEnvironment
 	}
+	c.NetworkDomain = utils.ValidateNetworkDomain(c.NetworkDomain)
 	return c.Network.defaults()
 }
 

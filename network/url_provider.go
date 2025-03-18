@@ -2,6 +2,7 @@ package network
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/Kameleoon/client-go/v3/types"
@@ -9,17 +10,20 @@ import (
 )
 
 const (
-	DefaultDataApiDomain = "data.kameleoon.io"
-	TestDataApiDomain    = "data.kameleoon.net"
-	trackingPath         = "/visit/events"
-	visitorDataPath      = "/visit/visitor"
-	getDataPath          = "/map/map"
+	TestDataApiDomain          = "data.kameleoon.net"
+	DefaultDataApiDomain       = "data.kameleoon.io"
+	DefaultEventsDomain        = "events.kameleoon.eu"
+	DefaultConfigurationDomain = "sdk-config.kameleoon.eu"
+	DefaultAccessTokenDomain   = "api.kameleoon.com"
 
-	configurationApiUrlFormat = "https://sdk-config.kameleoon.eu/%s"
+	trackingPath    = "/visit/events"
+	visitorDataPath = "/visit/visitor"
+	getDataPath     = "/map/map"
 
-	realTimeConfigurationUrl = "https://events.kameleoon.com:8110/sse"
-
-	oauthTokenUrl = "https://api.kameleoon.com/oauth/token"
+	configurationApiUrlFormat = "https://%s/%s"
+	rtConfigurationUrlFormat  = "https://%s:8110/sse?%s"
+	accessTokenUrlFormat      = "https://%s/oauth/token"
+	dataApiUrlFormat          = "https://%s%s?%s"
 )
 
 type UrlProvider interface {
@@ -34,24 +38,36 @@ type UrlProvider interface {
 
 	SiteCode() string
 	DataApiDomain() string
+	EventsDomain() string
+	ConfigurationDomain() string
+	AccessTokenDomain() string
 	SdkName() string
 	SdkVersion() string
 }
 
 type UrlProviderImpl struct {
-	siteCode      string
-	dataApiDomain string
-	sdkName       string
-	sdkVersion    string
+	siteCode            string
+	dataApiDomain       string
+	eventsDomain        string
+	configurationDomain string
+	accessTokenDomain   string
+	sdkName             string
+	sdkVersion          string
+	isCustomDomain      bool
 }
 
-func NewUrlProviderImpl(siteCode string, dataApiDomain string, sdkName string, sdkVersion string) *UrlProviderImpl {
-	return &UrlProviderImpl{
-		siteCode:      siteCode,
-		dataApiDomain: dataApiDomain,
-		sdkName:       sdkName,
-		sdkVersion:    sdkVersion,
+func NewUrlProviderImpl(siteCode string, networkDomain string, sdkName string, sdkVersion string) *UrlProviderImpl {
+	up := &UrlProviderImpl{
+		siteCode:            siteCode,
+		sdkName:             sdkName,
+		sdkVersion:          sdkVersion,
+		dataApiDomain:       DefaultDataApiDomain,
+		eventsDomain:        DefaultEventsDomain,
+		configurationDomain: DefaultConfigurationDomain,
+		accessTokenDomain:   DefaultAccessTokenDomain,
 	}
+	up.updateDomains(networkDomain)
+	return up
 }
 
 func (up *UrlProviderImpl) SiteCode() string {
@@ -60,6 +76,18 @@ func (up *UrlProviderImpl) SiteCode() string {
 
 func (up *UrlProviderImpl) DataApiDomain() string {
 	return up.dataApiDomain
+}
+
+func (up *UrlProviderImpl) EventsDomain() string {
+	return up.eventsDomain
+}
+
+func (up *UrlProviderImpl) ConfigurationDomain() string {
+	return up.configurationDomain
+}
+
+func (up *UrlProviderImpl) AccessTokenDomain() string {
+	return up.accessTokenDomain
 }
 
 func (up *UrlProviderImpl) SdkName() string {
@@ -77,13 +105,37 @@ func getUserIdQP(isUniqueIdentifier bool) string {
 	return utils.QPVisitorCode
 }
 
+func (up *UrlProviderImpl) updateDomains(networkDomain string) {
+	if networkDomain == "" {
+		return
+	}
+	up.isCustomDomain = true
+
+	up.eventsDomain = "events." + networkDomain
+	up.configurationDomain = "sdk-config." + networkDomain
+	up.dataApiDomain = "data." + networkDomain
+	up.accessTokenDomain = "api." + networkDomain
+}
+
+func (up *UrlProviderImpl) ApplyDataApiDomain(dataApiDomain string) {
+	if dataApiDomain != "" {
+		if up.isCustomDomain {
+			subDomain := dataApiDomain[:strings.Index(dataApiDomain, ".")]
+			re := regexp.MustCompile("^[^.]+")
+			up.dataApiDomain = re.ReplaceAllString(up.dataApiDomain, subDomain)
+		} else {
+			up.dataApiDomain = dataApiDomain
+		}
+	}
+}
+
 func (up *UrlProviderImpl) MakeTrackingUrl() string {
 	qb := utils.NewQueryBuilder()
 	qb.Append(utils.QPSdkName, up.sdkName)
 	qb.Append(utils.QPSdkVersion, up.sdkVersion)
 	qb.Append(utils.QPSiteCode, up.siteCode)
 	qb.Append(utils.QPBodyUA, "true")
-	return fmt.Sprintf("https://%s%s?%s", up.dataApiDomain, trackingPath, qb.String())
+	return fmt.Sprintf(dataApiUrlFormat, up.dataApiDomain, trackingPath, qb.String())
 }
 
 func (up *UrlProviderImpl) MakeVisitorDataGetUrl(
@@ -104,7 +156,9 @@ func (up *UrlProviderImpl) MakeVisitorDataGetUrl(
 	addFlagParamIfRequired(qb, utils.QPExperiment, filter.Experiments)
 	addFlagParamIfRequired(qb, utils.QPPage, filter.PageViews)
 	addFlagParamIfRequired(qb, utils.QPStaticData, filter.Device || filter.Browser || filter.OperatingSystem)
-	return fmt.Sprintf("https://%s%s?%s", up.dataApiDomain, visitorDataPath, qb.String())
+	addFlagParamIfRequired(qb, utils.QPPersonalization, filter.Personalization)
+	addFlagParamIfRequired(qb, utils.QPCbs, filter.Cbs)
+	return fmt.Sprintf(dataApiUrlFormat, up.dataApiDomain, visitorDataPath, qb.String())
 }
 
 func addFlagParamIfRequired(qb *utils.QueryBuilder, paramName string, state bool) {
@@ -117,7 +171,7 @@ func (up *UrlProviderImpl) MakeApiDataGetRequestUrl(key string) string {
 	qb := utils.NewQueryBuilder()
 	qb.Append(utils.QPSiteCode, up.siteCode)
 	qb.Append(utils.QPKey, key)
-	return fmt.Sprintf("https://%s%s?%s", up.dataApiDomain, getDataPath, qb.String())
+	return fmt.Sprintf(dataApiUrlFormat, up.dataApiDomain, getDataPath, qb.String())
 }
 
 func (up *UrlProviderImpl) MakeConfigurationUrl(environment string, ts int64) string {
@@ -132,7 +186,7 @@ func (up *UrlProviderImpl) MakeConfigurationUrl(environment string, ts int64) st
 		params = append(params, param{name: utils.QPTimestamp, value: fmt.Sprint(ts)})
 	}
 	sb := strings.Builder{}
-	sb.WriteString(fmt.Sprintf(configurationApiUrlFormat, up.siteCode))
+	sb.WriteString(fmt.Sprintf(configurationApiUrlFormat, up.configurationDomain, up.siteCode))
 	for i := 0; i < len(params); i++ {
 		if i == 0 {
 			sb.WriteRune('?')
@@ -149,15 +203,9 @@ func (up *UrlProviderImpl) MakeConfigurationUrl(environment string, ts int64) st
 func (up *UrlProviderImpl) MakeRealTimeUrl() string {
 	qb := utils.NewQueryBuilder()
 	qb.Append(utils.QPSiteCode, up.siteCode)
-	return realTimeConfigurationUrl + "?" + qb.String()
+	return fmt.Sprintf(rtConfigurationUrlFormat, up.eventsDomain, qb)
 }
 
 func (up *UrlProviderImpl) MakeAccessTokenUrl() string {
-	return oauthTokenUrl
-}
-
-func (up *UrlProviderImpl) ApplyDataApiDomain(dataApiDomain string) {
-	if dataApiDomain != "" {
-		up.dataApiDomain = dataApiDomain
-	}
+	return fmt.Sprintf(accessTokenUrlFormat, up.accessTokenDomain)
 }

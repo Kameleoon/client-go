@@ -6,15 +6,15 @@ import (
 	"strconv"
 )
 
-func GetHashDoubleRule(visitorCode string, containerID int, respoolTime int) float64 {
+func ObtainHashRule(visitorCode string, containerID int, respoolTime int) float64 {
 	suffix := ""
 	if respoolTime > 0 {
 		suffix = strconv.Itoa(respoolTime)
 	}
-	return GetHashDouble(visitorCode, containerID, suffix)
+	return ObtainHash(visitorCode, containerID, suffix)
 }
 
-func GetHashDouble(visitorCode string, containerID int, suffix ...string) float64 {
+func ObtainHash(visitorCode string, containerID int, suffix ...string) float64 {
 	var b []byte
 	b = append(b, visitorCode...)
 	b = append(b, WritePositiveInt(containerID)...)
@@ -24,7 +24,7 @@ func GetHashDouble(visitorCode string, containerID int, suffix ...string) float6
 	return CalculateHash(b)
 }
 
-func GetHashDoubleForMEGroup(visitorCode string, meGroupName string) float64 {
+func ObtainHashForMEGroup(visitorCode string, meGroupName string) float64 {
 	return CalculateHash([]byte(visitorCode + meGroupName))
 }
 

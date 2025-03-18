@@ -92,12 +92,27 @@ func (tm *targetingManager) getConditionData(
 			targetingDataTargetFeatureFlagCondition.VariationStorage = visitor.Variations()
 		}
 		conditionData = targetingDataTargetFeatureFlagCondition
+	case types.TargetingTargetExperiment:
+		if visitor != nil {
+			conditionData = visitor.Variations()
+		}
+	case types.TargetingTargetPersonalization:
+		if visitor != nil {
+			conditionData = visitor.Personalizations()
+		}
 	case types.TargetingExclusiveFeatureFlag:
 		targetingDataExclusiveFeatureFlag := conditions.TargetingDataExclusiveFeatureFlag{ExperimentId: campaignId}
 		if visitor != nil {
 			targetingDataExclusiveFeatureFlag.VariationStorage = visitor.Variations()
 		}
 		conditionData = targetingDataExclusiveFeatureFlag
+	case types.TargetingExclusiveExperiment:
+		targetingDataExclusiveExperiment := conditions.TargetingDataExclusiveExperiment{CurrentExperimentId: campaignId}
+		if visitor != nil {
+			targetingDataExclusiveExperiment.Variations = visitor.Variations()
+			targetingDataExclusiveExperiment.Personalizations = visitor.Personalizations()
+		}
+		conditionData = targetingDataExclusiveExperiment
 	case types.TargetingCookie:
 		if visitor != nil {
 			conditionData = visitor.Cookie()
