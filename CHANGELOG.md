@@ -1,6 +1,13 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.11.0 - 2025-03-24
+### Features
+* Added new variation of the [`TrackConversion`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#trackconversion) method:
+  - `TrackConversionWithOptParams(visitorCode string, goalId int, params TrackConversionOptParams) error`
+* Added new variation of the [`Conversion`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#conversion) data constructor:
+  - `NewConversionWithOptParams(goalId int, params ConversionOptParams) *Conversion`
+
 ## 3.10.0 - 2025-03-18
 ### Features
 * Added support for Contextual Bandit evaluations. Calling [`GetRemoteVisitorData`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getremotevisitordata) with the `cbs=true` flag is required for this feature to function correctly. Platform-wide release expected in March 2025.

@@ -1,9 +1,10 @@
 package types
 
 import (
-	"github.com/Kameleoon/client-go/v3/logging"
 	"fmt"
 	"strings"
+
+	"github.com/Kameleoon/client-go/v3/logging"
 
 	"github.com/Kameleoon/client-go/v3/utils"
 )
@@ -47,9 +48,6 @@ func (cd *CustomData) Values() []string {
 }
 
 func (cd *CustomData) QueryEncode() string {
-	if len(cd.values) == 0 {
-		return ""
-	}
 	nonce := cd.Nonce()
 	if len(nonce) == 0 {
 		return ""
@@ -62,12 +60,15 @@ func (cd *CustomData) QueryEncode() string {
 	qb.Append(utils.QPNonce, nonce)
 	return qb.String()
 }
+
 func (cd *CustomData) encodeValues() string {
 	sb := strings.Builder{}
-	sb.WriteString("{\"")
+	sb.WriteString("{")
 	for i, value := range cd.values {
 		if i > 0 {
 			sb.WriteString(",\"")
+		} else {
+			sb.WriteString("\"")
 		}
 		s := strings.ReplaceAll(value, "\\", "\\\\")
 		s = strings.ReplaceAll(s, "\"", "\\\"")

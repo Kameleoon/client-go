@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/Kameleoon/client-go/v3/utils"
 )
@@ -14,17 +15,36 @@ type Conversion struct {
 	goalId   int
 	revenue  float64
 	negative bool
+	metadata []*CustomData
+}
+
+type ConversionOptParams struct {
+	Revenue  float64
+	Negative bool
+	Metadata []*CustomData
 }
 
 func NewConversion(goalId int, negative ...bool) *Conversion {
-	return NewConversionWithRevenue(goalId, 0.0, negative...)
+	var p ConversionOptParams
+	if len(negative) > 0 {
+		p.Negative = negative[0]
+	}
+	return NewConversionWithOptParams(goalId, p)
 }
 func NewConversionWithRevenue(goalId int, revenue float64, negative ...bool) *Conversion {
-	var negativeValue bool
+	p := ConversionOptParams{Revenue: revenue}
 	if len(negative) > 0 {
-		negativeValue = negative[0]
+		p.Negative = negative[0]
 	}
-	c := &Conversion{goalId: goalId, revenue: revenue, negative: negativeValue}
+	return NewConversionWithOptParams(goalId, p)
+}
+func NewConversionWithOptParams(goalId int, params ConversionOptParams) *Conversion {
+	c := &Conversion{
+		goalId:   goalId,
+		revenue:  params.Revenue,
+		negative: params.Negative,
+		metadata: params.Metadata,
+	}
 	c.initSendale()
 	return c
 }
@@ -61,7 +81,51 @@ func (c *Conversion) QueryEncode() string {
 	qb.Append(utils.QPRevenue, strconv.FormatFloat(c.revenue, 'f', -1, 64))
 	qb.Append(utils.QPNegative, strconv.FormatBool(c.negative))
 	qb.Append(utils.QPNonce, nonce)
+	if c.metadata != nil && len(c.metadata) > 0 {
+		qb.Append(utils.QPMetadata, c.encodeMetadata())
+	}
 	return qb.String()
+}
+
+func (c *Conversion) encodeMetadata() string {
+	sb := strings.Builder{}
+	sb.WriteRune('{')
+	addComma := false
+	addedIndices := make(map[int]struct{})
+	for _, mcd := range c.metadata {
+		if mcd == nil {
+			continue
+		}
+		if _, contains := addedIndices[mcd.ID()]; contains {
+			continue
+		}
+		if addComma {
+			sb.WriteRune(',')
+		} else {
+			addComma = true
+		}
+		writeCustomDataMetadata(mcd, &sb)
+		addedIndices[mcd.ID()] = struct{}{}
+	}
+	sb.WriteRune('}')
+	return sb.String()
+}
+
+func writeCustomDataMetadata(cd *CustomData, sb *strings.Builder) {
+	sb.WriteRune('"')
+	sb.WriteString(strconv.Itoa(cd.ID()))
+	sb.WriteString("\":[")
+	for i, value := range cd.Values() {
+		if i > 0 {
+			sb.WriteRune(',')
+		}
+		sb.WriteRune('"')
+		value = strings.ReplaceAll(value, "\\", "\\\\")
+		value = strings.ReplaceAll(value, "\"", "\\\"")
+		sb.WriteString(value)
+		sb.WriteRune('"')
+	}
+	sb.WriteRune(']')
 }
 
 func (c *Conversion) DataType() DataType {

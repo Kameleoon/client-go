@@ -58,6 +58,7 @@ const (
 	QPMappingIdentifier       = "mappingIdentifier"
 	QPMappingValue            = "mappingValue"
 	QPMaxNumberPreviousVisits = "maxNumberPreviousVisits"
+	QPMetadata                = "metadata"
 	QPNegative                = "negative"
 	QPNonce                   = "nonce"
 	QPOs                      = "os"

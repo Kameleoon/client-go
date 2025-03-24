@@ -71,6 +71,12 @@ func (p GetVariationsOptParams) Track(value bool) GetVariationsOptParams {
 	return p
 }
 
+type TrackConversionOptParams struct {
+	Revenue  float64
+	Negative bool
+	Metadata []*types.CustomData
+}
+
 type SetForcedVariationOptParams struct {
 	forceTargeting bool
 }
@@ -118,6 +124,8 @@ type KameleoonClient interface {
 	TrackConversion(visitorCode string, goalID int, isUniqueIdentifier ...bool) error
 
 	TrackConversionRevenue(visitorCode string, goalID int, revenue float64, isUniqueIdentifier ...bool) error
+
+	TrackConversionWithOptParams(visitorCode string, goalId int, params TrackConversionOptParams) error
 
 	// FlushVisitor the associated data.
 	//
@@ -462,10 +470,14 @@ func (c *kameleoonClient) TrackConversion(visitorCode string, goalID int, isUniq
 	logging.Info(
 		"CALL: kameleoonClient.TrackConversion(visitorCode: %s, goalID: %s, isUniqueIdentifier: %s)",
 		visitorCode, goalID, isUniqueIdentifier)
+	var err error
 	if len(isUniqueIdentifier) > 0 {
+		if err = utils.ValidateVisitorCode(visitorCode); err != nil {
+			return err
+		}
 		c.setUniqueIdentifier(visitorCode, isUniqueIdentifier[0])
 	}
-	err := c.trackConversion(visitorCode, goalID)
+	err = c.TrackConversionWithOptParams(visitorCode, goalID, TrackConversionOptParams{})
 	logging.Info(
 		"RETURN: kameleoonClient.TrackConversion(visitorCode: %s, goalID: %s, isUniqueIdentifier: %s) -> (error: %s)",
 		visitorCode, goalID, isUniqueIdentifier, err)
@@ -478,31 +490,44 @@ func (c *kameleoonClient) TrackConversionRevenue(
 	logging.Info(
 		"CALL: kameleoonClient.TrackConversionRevenue(visitorCode: %s, goalID: %s, revenue: %s,"+
 			" isUniqueIdentifier: %s)", visitorCode, goalID, revenue, isUniqueIdentifier)
+	var err error
 	if len(isUniqueIdentifier) > 0 {
+		if err = utils.ValidateVisitorCode(visitorCode); err != nil {
+			return err
+		}
 		c.setUniqueIdentifier(visitorCode, isUniqueIdentifier[0])
 	}
-	err := c.trackConversion(visitorCode, goalID, revenue)
+	err = c.TrackConversionWithOptParams(visitorCode, goalID, TrackConversionOptParams{Revenue: revenue})
 	logging.Info(
 		"RETURN: kameleoonClient.TrackConversionRevenue(visitorCode: %s, goalID: %s, revenue: %s,"+
 			" isUniqueIdentifier: %s) -> (error: %s)", visitorCode, goalID, revenue, isUniqueIdentifier, err)
 	return err
 }
 
-func (c *kameleoonClient) trackConversion(
-	visitorCode string, goalID int, revenue ...float64,
-) error {
-	if err := utils.ValidateVisitorCode(visitorCode); err != nil {
-		return err
+func (c *kameleoonClient) TrackConversionWithOptParams(
+	visitorCode string, goalId int, params TrackConversionOptParams,
+) (err error) {
+	logging.Info(
+		"CALL: kameleoonClient.TrackConversionWithOptParams(visitorCode: %s, goalId: %s, params: %s)",
+		visitorCode, goalId, params,
+	)
+	defer logging.Info(
+		"RETURN: kameleoonClient.TrackConversionWithOptParams(visitorCode: %s, goalId: %s, params: %s) -> (error: %s)",
+		visitorCode, goalId, params, err,
+	)
+	if err = utils.ValidateVisitorCode(visitorCode); err != nil {
+		return
 	}
-	var conv *types.Conversion
-	if len(revenue) > 0 {
-		conv = types.NewConversionWithRevenue(goalID, revenue[0])
-	} else {
-		conv = types.NewConversion(goalID)
+	paramsConversion := types.ConversionOptParams{
+		Revenue:  params.Revenue,
+		Negative: params.Negative,
+		Metadata: params.Metadata,
 	}
-	c.AddData(visitorCode, conv)
+	if err = c.AddData(visitorCode, types.NewConversionWithOptParams(goalId, paramsConversion)); err != nil {
+		return
+	}
 	c.trackingManager.AddVisitorCode(visitorCode)
-	return nil
+	return
 }
 
 func (c *kameleoonClient) FlushVisitor(visitorCode string, isUniqueIdentifier ...bool) error {
