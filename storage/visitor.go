@@ -381,12 +381,12 @@ func (vd *visitorData) enumerateSendableData(f func(types.Sendable) bool) {
 		func(pvv types.PageViewVisit) bool { return f(pvv.PageView) }) {
 		return
 	}
-	if !enumerateSlice[*types.Conversion](vd.conversions,
-		func(c *types.Conversion) bool { return f(c) }) {
-		return
-	}
 	if !enumerateMap[int, *types.AssignedVariation](vd.variations,
 		func(av *types.AssignedVariation) bool { return f(av) }) {
+		return
+	}
+	if !enumerateSlice[*types.Conversion](vd.conversions,
+		func(c *types.Conversion) bool { return f(c) }) {
 		return
 	}
 }

@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.11.1 - 2025-04-08
+### Bug fixes
+* Changed the order in which **conversion** and **experiment** events are sent. This may lead to more accurate **visit**-level experiment reporting.
+
 ## 3.11.0 - 2025-03-24
 ### Features
 * Added new variation of the [`TrackConversion`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#trackconversion) method:

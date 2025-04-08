@@ -138,15 +138,15 @@ func (tb *TrackingBuilder) getUnsentVisitorData(visitor storage.Visitor, isConse
 				return true
 			})
 		} else {
-			visitor.Conversions().Enumerate(func(c *types.Conversion) bool {
-				if c.Unsent() {
-					unsentData = append(unsentData, c)
-				}
-				return true
-			})
 			visitor.Variations().Enumerate(func(av *types.AssignedVariation) bool {
 				if av.Unsent() && (av.RuleType() == types.RuleTypeTargetedDelivery) {
 					unsentData = append(unsentData, av)
+				}
+				return true
+			})
+			visitor.Conversions().Enumerate(func(c *types.Conversion) bool {
+				if c.Unsent() {
+					unsentData = append(unsentData, c)
 				}
 				return true
 			})
