@@ -1,6 +1,7 @@
 package types
 
 type DataFile interface {
+	LastModified() string
 	CustomDataInfo() *CustomDataInfo
 	Holdout() *Experiment
 	Settings() Settings

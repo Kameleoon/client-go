@@ -24,7 +24,8 @@ func (nm *NetworkManagerImpl) FetchAccessJWToken(clientId string, clientSecret s
 		Data:        data,
 		Timeout:     timeout,
 	}
-	return nm.makeCall(&request, NetworkCallAttemptsNumberUncritical, -1)
+	response, err := nm.makeCall(&request, NetworkCallAttemptsNumberUncritical, -1)
+	return response.Body, err
 }
 
 func (nm *NetworkManagerImpl) formFetchAccessTokenData(clientId string, clientSecret string) string {

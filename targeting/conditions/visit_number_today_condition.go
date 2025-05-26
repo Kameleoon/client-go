@@ -24,16 +24,24 @@ func NewVisitNumberTodayCondition(c types.TargetingCondition) *VisitNumberTodayC
 }
 
 func (c *VisitNumberTodayCondition) CheckTargeting(targetData interface{}) bool {
-	vv, ok := targetData.(*types.VisitorVisits)
+	td, ok := targetData.(TargetingDataVisitNumberToday)
 	if ok && (c.Value != -1) {
 		now := time.Now()
 		startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).UnixMilli()
-		prevVisitsTime := vv.PreviousVisitTimestamps()
+		prevVisits := td.VisitorVisits.PrevVisits()
 		var todayVisitNumber int
-		for (todayVisitNumber < len(prevVisitsTime)) && (prevVisitsTime[todayVisitNumber] >= startOfDay) {
+		for (todayVisitNumber < len(prevVisits)) && (prevVisits[todayVisitNumber].TimeStarted() >= startOfDay) {
 			todayVisitNumber++
 		}
-		return c.checkTargeting(todayVisitNumber + 1) // +1 for current visit
+		if td.CurrentVisitTimeStarted.UnixMilli() >= startOfDay {
+			todayVisitNumber++
+		}
+		return c.checkTargeting(todayVisitNumber)
 	}
 	return false
+}
+
+type TargetingDataVisitNumberToday struct {
+	CurrentVisitTimeStarted time.Time
+	VisitorVisits           *types.VisitorVisits
 }

@@ -20,7 +20,8 @@ func (nm *NetworkManagerImpl) GetRemoteData(key string, timeout time.Duration) (
 		Timeout:        timeout,
 		IsAuthRequired: true,
 	}
-	return nm.makeCall(&request, NetworkCallAttemptsNumberUncritical, -1)
+	response, err := nm.makeCall(&request, NetworkCallAttemptsNumberUncritical, -1)
+	return response.Body, err
 }
 
 func (nm *NetworkManagerImpl) GetRemoteVisitorData(
@@ -34,7 +35,8 @@ func (nm *NetworkManagerImpl) GetRemoteVisitorData(
 		Timeout:        timeout,
 		IsAuthRequired: true,
 	}
-	return nm.makeCall(&request, NetworkCallAttemptsNumberUncritical, -1)
+	response, err := nm.makeCall(&request, NetworkCallAttemptsNumberUncritical, -1)
+	return response.Body, err
 }
 
 func (nm *NetworkManagerImpl) SendTrackingData(trackingLines string) (bool, error) {

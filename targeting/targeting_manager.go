@@ -1,6 +1,8 @@
 package targeting
 
 import (
+	"time"
+
 	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/managers/data"
 	"github.com/Kameleoon/client-go/v3/storage"
@@ -100,12 +102,6 @@ func (tm *targetingManager) getConditionData(
 		if visitor != nil {
 			conditionData = visitor.Personalizations()
 		}
-	case types.TargetingExclusiveFeatureFlag:
-		targetingDataExclusiveFeatureFlag := conditions.TargetingDataExclusiveFeatureFlag{ExperimentId: campaignId}
-		if visitor != nil {
-			targetingDataExclusiveFeatureFlag.VariationStorage = visitor.Variations()
-		}
-		conditionData = targetingDataExclusiveFeatureFlag
 	case types.TargetingExclusiveExperiment:
 		targetingDataExclusiveExperiment := conditions.TargetingDataExclusiveExperiment{CurrentExperimentId: campaignId}
 		if visitor != nil {
@@ -138,13 +134,20 @@ func (tm *targetingManager) getConditionData(
 		fallthrough
 	case types.TargetingVisits:
 		fallthrough
-	case types.TargetingSameDayVisits:
-		fallthrough
 	case types.TargetingNewVisitors:
 		if visitor != nil {
 			conditionData = visitor.VisitorVisits()
 		} else {
 			conditionData = (*types.VisitorVisits)(nil)
+		}
+	case types.TargetingSameDayVisits:
+		if visitor != nil {
+			conditionData = conditions.TargetingDataVisitNumberToday{
+				CurrentVisitTimeStarted: visitor.TimeStarted(),
+				VisitorVisits:           visitor.VisitorVisits(),
+			}
+		} else {
+			conditionData = conditions.TargetingDataVisitNumberToday{CurrentVisitTimeStarted: time.Now()}
 		}
 	case types.TargetingHeatSlice:
 		if visitor != nil {

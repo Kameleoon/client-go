@@ -9,6 +9,7 @@ import (
 )
 
 type DataFile struct {
+	lastModified                     string
 	customDataInfo                   *types.CustomDataInfo
 	holdout                          *types.Experiment
 	settings                         Settings
@@ -25,13 +26,17 @@ type DataFile struct {
 }
 
 func (df DataFile) String() string {
-	return fmt.Sprintf("DataFile{environment:'%v',featureFlags:%v,settings:%v}",
-		df.environment, len(df.featureFlags), df.settings)
+	return fmt.Sprintf(
+		"DataFile{environment:'%v',lastModified:'%v',featureFlags:%v,settings:%v}",
+		df.environment, df.lastModified, len(df.featureFlags), df.settings,
+	)
 }
 
-func NewDataFile(configuration Configuration, environment string) *DataFile {
-	logging.Debug("CALL: NewDataFile(configuration: %s, environment: %s)",
-		configuration, environment)
+func NewDataFile(configuration Configuration, lastModified string, environment string) *DataFile {
+	logging.Debug(
+		"CALL: NewDataFile(configuration: %s, lastModified: %s, environment: %s)",
+		configuration, lastModified, environment,
+	)
 	ffs, orderedFFs := collectFeatureFlagsFromConfiguration(configuration)
 	featureFlagById, ruleBySegmentId, ruleInfoByExpId, variationById, experimentIdsWithJSOrCSSVariable :=
 		collectIndices(ffs)
@@ -40,6 +45,7 @@ func NewDataFile(configuration Configuration, environment string) *DataFile {
 		cdi = types.NewCustomDataInfo()
 	}
 	dataFile := &DataFile{
+		lastModified:                     lastModified,
 		customDataInfo:                   cdi,
 		holdout:                          configuration.Holdout,
 		settings:                         configuration.Settings,
@@ -54,8 +60,10 @@ func NewDataFile(configuration Configuration, environment string) *DataFile {
 		variationById:                    variationById,
 		experimentIdsWithJSOrCSSVariable: experimentIdsWithJSOrCSSVariable,
 	}
-	logging.Debug("RETURN: NewDataFile(configuration: %s, environment: %s) -> (dataFile: %s)",
-		configuration, environment, dataFile)
+	logging.Debug(
+		"RETURN: NewDataFile(configuration: %s, lastModified: %s, environment: %s)",
+		configuration, lastModified, environment,
+	)
 	return dataFile
 }
 
@@ -71,6 +79,10 @@ func collectFeatureFlagsFromConfiguration(
 		ordered[i] = ff
 	}
 	return
+}
+
+func (df *DataFile) LastModified() string {
+	return df.lastModified
 }
 
 func (df *DataFile) CustomDataInfo() *types.CustomDataInfo {

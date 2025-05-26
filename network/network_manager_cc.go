@@ -1,15 +1,13 @@
 package network
 
-import (
-	"encoding/json"
-)
-
 const (
-	HeaderSdkType    = "X-Kameleoon-SDK-Type"
-	HeaderSdkVersion = "X-Kameleoon-SDK-Version"
+	HeaderSdkType         = "X-Kameleoon-SDK-Type"
+	HeaderSdkVersion      = "X-Kameleoon-SDK-Version"
+	HeaderIfModifiedSince = "If-Modified-Since"
+	HeaderLastModified    = "Last-Modified"
 )
 
-func (nm *NetworkManagerImpl) FetchConfiguration(ts int64) (json.RawMessage, error) {
+func (nm *NetworkManagerImpl) FetchConfiguration(ts int64, ifModifiedSince string) (FetchedConfiguration, error) {
 	url := nm.UrlProvider.MakeConfigurationUrl(nm.Environment, ts)
 	request := &Request{
 		Method:      HttpGet,
@@ -20,5 +18,13 @@ func (nm *NetworkManagerImpl) FetchConfiguration(ts int64) (json.RawMessage, err
 			HeaderSdkVersion: nm.UrlProvider.SdkVersion(),
 		},
 	}
-	return nm.makeCall(request, NetworkCallAttemptsNumberCritical, -1)
+	if ifModifiedSince != "" {
+		request.Headers[HeaderIfModifiedSince] = ifModifiedSince
+	}
+	response, err := nm.makeCall(request, NetworkCallAttemptsNumberCritical, -1, HeaderLastModified)
+	if err != nil {
+		return FetchedConfiguration{}, err
+	}
+	lastModified := response.HeadersRead[HeaderLastModified]
+	return FetchedConfiguration{Configuration: response.Body, LastModified: lastModified}, nil
 }

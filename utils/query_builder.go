@@ -74,11 +74,13 @@ const (
 	QPSdkVersion              = "sdkVersion"
 	QPSiteCode                = "siteCode"
 	QPStaticData              = "staticData"
+	QPTimeSincePreviousVisit  = "timeSincePreviousVisit"
 	QPTitle                   = "title"
 	QPTimestamp               = "ts"
 	QPUserAgent               = "userAgent"
 	QPValuesCountMap          = "valuesCountMap"
 	QPVariationId             = "variationId"
 	QPVersion                 = "version"
+	QPVisitNumber             = "visitNumber"
 	QPVisitorCode             = "visitorCode"
 )

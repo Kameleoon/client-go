@@ -61,7 +61,6 @@ const (
 	TargetingTargetFeatureFlag      TargetingType = "TARGET_FEATURE_FLAG"
 	TargetingTargetExperiment       TargetingType = "TARGET_EXPERIMENT"
 	TargetingTargetPersonalization  TargetingType = "TARGET_PERSONALIZATION"
-	TargetingExclusiveFeatureFlag   TargetingType = "EXCLUSIVE_FEATURE_FLAG"
 	TargetingExclusiveExperiment    TargetingType = "EXCLUSIVE_EXPERIMENT"
 	TargetingSDKLanguage            TargetingType = "SDK_LANGUAGE"
 	TargetingVisitorCode            TargetingType = "VISITOR_CODE"

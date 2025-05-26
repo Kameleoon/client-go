@@ -1,9 +1,10 @@
 package configuration
 
 import (
-	"github.com/Kameleoon/client-go/v3/logging"
 	"sync"
 	"time"
+
+	"github.com/Kameleoon/client-go/v3/logging"
 
 	"github.com/Kameleoon/client-go/v3/managers/data"
 	"github.com/Kameleoon/client-go/v3/network"
@@ -15,6 +16,7 @@ import (
 type ConfigurationManager interface {
 	Start() error
 	OnUpdateConfiguration(handler func())
+	TryFetch(ts int64) (bool, error)
 }
 
 type configurationManagerImpl struct {
@@ -49,7 +51,7 @@ func NewConfigurationManager(dataManager data.DataManager, networkManager networ
 
 func (cm *configurationManagerImpl) Start() error {
 	logging.Debug("CALL: configurationManagerImpl.Start()")
-	ok, err := cm.tryFetch(-1)
+	ok, err := cm.TryFetch(-1)
 	if !ok {
 		cm.startPollingConfigurationTickerIfNeeded()
 	}
@@ -63,7 +65,7 @@ func (cm *configurationManagerImpl) OnUpdateConfiguration(handler func()) {
 	logging.Debug("RETURN: configurationManagerImpl.OnUpdateConfiguration()")
 }
 
-func (cm *configurationManagerImpl) tryFetch(ts int64) (bool, error) {
+func (cm *configurationManagerImpl) TryFetch(ts int64) (bool, error) {
 	logging.Debug("CALL: configurationManagerImpl.tryFetch(ts: %s)", ts)
 	if (ts != -1) && (ts < cm.lastTS) {
 		logging.Debug("RETURN: configurationManagerImpl.tryFetch(ts: %s) -> (isFetched: false, error: <nil>)", ts)
@@ -94,11 +96,13 @@ func (cm *configurationManagerImpl) tryFetch(ts int64) (bool, error) {
 
 func (cm *configurationManagerImpl) fetchConfig(ts int64) error {
 	logging.Debug("CALL: configurationManagerImpl.fetchConfig(ts: %s)", ts)
-	clientConfig, err := cm.requestClientConfig(ts)
+	clientConfig, hasClientConfig, lastModified, err := cm.requestClientConfig(ts)
 	if err == nil {
-		cm.updateDataFile(NewDataFile(clientConfig, cm.environment))
-		if ts != -1 && cm.updateConfigurationHandler != nil {
-			cm.updateConfigurationHandler()
+		if hasClientConfig {
+			cm.updateDataFile(NewDataFile(clientConfig, lastModified, cm.environment))
+			if (ts != -1) && (cm.updateConfigurationHandler != nil) {
+				cm.updateConfigurationHandler()
+			}
 		}
 	} else {
 		logging.Error("Failed to fetch: %s", err)
@@ -116,7 +120,7 @@ func (cm *configurationManagerImpl) updateDataFile(df *DataFile) {
 	logging.Debug("RETURN: configurationManagerImpl.updateDataFile(df: %s)", df)
 }
 
-func (cm *configurationManagerImpl) requestClientConfig(ts int64) (Configuration, error) {
+func (cm *configurationManagerImpl) requestClientConfig(ts int64) (Configuration, bool, string, error) {
 	logging.Debug("CALL: configurationManagerImpl.requestClientConfig(ts: %s)", ts)
 	if ts == -1 {
 		logging.Info("Fetching configuration")
@@ -125,9 +129,9 @@ func (cm *configurationManagerImpl) requestClientConfig(ts int64) (Configuration
 	}
 	var campaigns Configuration
 
-	out, err := cm.networkManager.FetchConfiguration(ts)
-	if err == nil {
-		err = json.Unmarshal(out, &campaigns)
+	fetchedConfiguration, err := cm.networkManager.FetchConfiguration(ts, cm.dataManager.DataFile().LastModified())
+	if (err == nil) && (len(fetchedConfiguration.Configuration) > 0) {
+		err = json.Unmarshal(fetchedConfiguration.Configuration, &campaigns)
 	}
 	if err == nil {
 		logging.Info("Configuraiton fetched: %s", campaigns)
@@ -136,7 +140,7 @@ func (cm *configurationManagerImpl) requestClientConfig(ts int64) (Configuration
 	}
 	logging.Debug("RETURN: configurationManagerImpl.requestClientConfig(ts: %s) -> (campaigns: %s, error: %s)",
 		ts, campaigns, err)
-	return campaigns, err
+	return campaigns, len(fetchedConfiguration.Configuration) > 0, fetchedConfiguration.LastModified, err
 }
 
 func (cm *configurationManagerImpl) startPollingConfigurationTickerIfNeeded() {
@@ -154,7 +158,7 @@ func (cm *configurationManagerImpl) startPollingConfigurationTickerIfNeeded() {
 				select {
 				case halt = <-cm.pollingConfigurationStopChan:
 				case <-cm.pollingConfigurationTicker.C:
-					cm.tryFetch(-1)
+					cm.TryFetch(-1)
 				}
 			}
 		}
@@ -186,7 +190,7 @@ func (cm *configurationManagerImpl) startRealTimeConfigurationServiceIfNeeded() 
 		cm.networkManager.GetUrlProvider().MakeRealTimeUrl(), cm.realTimeUpdateChan, cm.sseClient)
 	go func() {
 		for realTimeEvent := range cm.realTimeUpdateChan {
-			cm.tryFetch(realTimeEvent.TimeStamp)
+			cm.TryFetch(realTimeEvent.TimeStamp)
 		}
 	}()
 	logging.Info("Configuration streaming is started")

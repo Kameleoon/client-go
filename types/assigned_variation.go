@@ -64,7 +64,7 @@ func (av *AssignedVariation) AssignmentTime() time.Time {
 }
 
 func (av *AssignedVariation) IsValid(respoolTime int) bool {
-	return (respoolTime == 0) || (av.assignmentTime.Unix() >= int64(respoolTime))
+	return (respoolTime == 0) || (av.assignmentTime.UnixMilli() >= int64(respoolTime))
 }
 
 func (av *AssignedVariation) QueryEncode() string {

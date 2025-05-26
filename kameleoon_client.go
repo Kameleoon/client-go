@@ -351,7 +351,7 @@ func newClient(siteCode string, cfg *KameleoonClientConfig) (*kameleoonClient, e
 		logging.SetLogLevel(logging.INFO)
 	}
 
-	df := configuration.NewDataFile(configuration.Configuration{}, cfg.Environment)
+	df := configuration.NewDataFile(configuration.Configuration{}, "", cfg.Environment)
 	dm := data.NewDataManagerImpl(df)
 	np := network.NewNetProviderImpl(cfg.Network.ReadTimeout, cfg.Network.WriteTimeout,
 		cfg.Network.MaxConnsPerHost, cfg.Network.ProxyURL)

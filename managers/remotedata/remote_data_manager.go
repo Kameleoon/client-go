@@ -88,7 +88,7 @@ func (rdm *remoteDataManagerImpl) GetVisitorData(
 			visitorCode, filter, addData, isUniqueIdentifier, timeout, err)
 		return nil, err
 	}
-	var data remoteVisitorData
+	data := newRemoteVisitorData(filter)
 	if err = json.Unmarshal(out, &data); err != nil {
 		logging.Debug(
 			"RETURN: remoteDataManagerImpl.GetVisitorData(visitorCode: %s, filter: %s, addData: %s, "+

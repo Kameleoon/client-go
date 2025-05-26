@@ -54,14 +54,15 @@ func (r Request) String() string {
 // response
 
 type Response struct {
-	Err     error    // optional (nil)
-	Code    int      // optional (0)
-	Body    []byte   // optional ([])
-	Request *Request // mandatory
+	Err         error             // optional (nil)
+	Code        int               // optional (0)
+	Body        []byte            // optional ([])
+	HeadersRead map[string]string // optional ({})
+	Request     *Request          // mandatory
 }
 
 func (r Response) IsExpectedStatusCode() bool {
-	return (r.Code/100 == 2) || (r.Code == 403)
+	return (r.Code/100 == 2) || (r.Code == 403) || (r.Code == 304)
 }
 
 func (r Response) String() string {
@@ -71,7 +72,7 @@ func (r Response) String() string {
 // declaration
 
 type NetProvider interface {
-	Call(request *Request) Response
+	Call(request *Request, headersToRead []string) Response
 }
 
 // implementation
@@ -102,7 +103,7 @@ func NewNetProviderImpl(readTimeout time.Duration, writeTimeout time.Duration,
 	return np
 }
 
-func (np *NetProviderImpl) Call(request *Request) Response {
+func (np *NetProviderImpl) Call(request *Request, headersToRead []string) Response {
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	req.Header.SetMethod(string(request.Method))
@@ -116,14 +117,15 @@ func (np *NetProviderImpl) Call(request *Request) Response {
 	err := np.client.DoTimeout(req, resp, request.Timeout)
 	var response Response
 	if err == nil {
-		response = Response{Code: resp.StatusCode(), Body: resp.Body(), Request: request}
+		headersRead := np.readHeaders(resp, headersToRead)
+		response = Response{Code: resp.StatusCode(), Body: resp.Body(), HeadersRead: headersRead, Request: request}
 	} else {
 		response = Response{Err: err, Request: request}
 	}
 	return response
 }
 
-func (np *NetProviderImpl) setHeaders(req *fasthttp.Request, request *Request) {
+func (*NetProviderImpl) setHeaders(req *fasthttp.Request, request *Request) {
 	if len(request.Headers) > 0 {
 		for key, value := range request.Headers {
 			req.Header.Set(key, value)
@@ -135,4 +137,12 @@ func (np *NetProviderImpl) setHeaders(req *fasthttp.Request, request *Request) {
 	if len(request.ContentType) > 0 {
 		req.Header.SetContentType(string(request.ContentType))
 	}
+}
+
+func (*NetProviderImpl) readHeaders(resp *fasthttp.Response, headersToRead []string) map[string]string {
+	headers := make(map[string]string)
+	for _, h := range headersToRead {
+		headers[h] = string(resp.Header.Peek(h))
+	}
+	return headers
 }

@@ -30,13 +30,18 @@ type NetworkManager interface {
 	FetchAccessJWToken(clientId string, clientSecret string, timeout time.Duration) (json.RawMessage, error)
 
 	// SDK config API
-	FetchConfiguration(ts int64) (json.RawMessage, error)
+	FetchConfiguration(ts int64, ifModifiedSince string) (FetchedConfiguration, error)
 
 	// Data API
 	GetRemoteData(key string, timeout time.Duration) (json.RawMessage, error)
 	GetRemoteVisitorData(visitorCode string, filter types.RemoteVisitorDataFilter, isUniqueIdentifier bool,
 		timeout time.Duration) (json.RawMessage, error)
 	SendTrackingData(trackingLines string) (bool, error)
+}
+
+type FetchedConfiguration struct {
+	Configuration json.RawMessage
+	LastModified  string
 }
 
 // base implementation
@@ -97,7 +102,9 @@ func (nm *NetworkManagerImpl) ensureTimeout(request *Request) {
 	}
 }
 
-func (nm *NetworkManagerImpl) makeCall(request *Request, attemptCount int, retryDelay time.Duration) ([]byte, error) {
+func (nm *NetworkManagerImpl) makeCall(
+	request *Request, attemptCount int, retryDelay time.Duration, headersToRead ...string,
+) (Response, error) {
 	logging.Debug("Running request %s with retry limit %s, retry delay %s ms", request, attemptCount, retryDelay)
 	nm.ensureTimeout(request)
 	var err error
@@ -109,22 +116,22 @@ func (nm *NetworkManagerImpl) makeCall(request *Request, attemptCount int, retry
 			time.Sleep(retryDelay)
 		}
 		nm.authorizeIfRequired(request)
-		response = nm.NetProvider.Call(request)
+		response = nm.NetProvider.Call(request, headersToRead)
 		if isTokenRejected, err = nm.processErrors(request, &response, logLevel); err == nil {
 			logging.Debug("Fetched response %s for request %s", response, request)
-			return response.Body, nil
+			return response, nil
 		}
 	}
 	if isTokenRejected {
 		logging.Error("Wrong Kameleoon API access token slows down the SDK's requests")
 		request.AccessToken = ""
-		response = nm.NetProvider.Call(request)
+		response = nm.NetProvider.Call(request, headersToRead)
 		if _, err = nm.processErrors(request, &response, logging.ERROR); err == nil {
 			logging.Debug("Fetched response %s for request %s", response, request)
-			return response.Body, nil
+			return response, nil
 		}
 	}
-	return nil, err
+	return Response{}, err
 }
 
 func (nm *NetworkManagerImpl) getLogLevel(attempt int, attemptCount int) logging.LogLevel {
@@ -145,11 +152,11 @@ func (nm *NetworkManagerImpl) processErrors(request *Request, response *Response
 	var isTokenRejected bool
 	if response.Err != nil {
 		err = response.Err
-		logging.Log(logLevel, "%s call '%s' failed: Error occurred during request: %s",
+		logging.Log(logLevel, "%s call %s failed: Error occurred during request: %s",
 			request.Method, request.Url, err)
 	} else if !response.IsExpectedStatusCode() {
 		err = errs.NewUnexpectedStatusCode(response.Code, response.Body)
-		logging.Log(logLevel, "%s call '%s' failed: Received unexpected status code: %s, body: %s",
+		logging.Log(logLevel, "%s call %s failed: Received unexpected status code: %s, body: %s",
 			request.Method, request.Url, response.Code, string(response.Body[:]))
 		if (response.Code == codeUnauthorized) && (request.AccessToken != "") {
 			logging.Log(logLevel, "Unexpected rejection of access token %s", request.AccessToken)

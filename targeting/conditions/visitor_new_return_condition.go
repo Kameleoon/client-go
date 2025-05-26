@@ -28,12 +28,11 @@ func NewVisitorNewReturnCondition(c types.TargetingCondition) *VisitorNewReturnC
 func (c *VisitorNewReturnCondition) CheckTargeting(targetData interface{}) bool {
 	vv, ok := targetData.(*types.VisitorVisits)
 	if ok {
-		prevVisitsTime := vv.PreviousVisitTimestamps()
 		switch c.visitorType {
 		case visitorTypeNew:
-			return len(prevVisitsTime) == 0
+			return len(vv.PrevVisits()) == 0
 		case visitorTypeReturn:
-			return len(prevVisitsTime) > 0
+			return len(vv.PrevVisits()) > 0
 		}
 	}
 	return false

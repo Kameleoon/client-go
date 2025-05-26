@@ -9,6 +9,7 @@ import (
 )
 
 type Visitor interface {
+	TimeStarted() time.Time
 	LastActivityTime() time.Time
 	UpdateLastActivityTime()
 
@@ -55,7 +56,7 @@ type VisitorImpl struct {
 }
 
 func NewVisitorImpl() *VisitorImpl {
-	v := &VisitorImpl{data: new(visitorData)}
+	v := &VisitorImpl{data: newVisitorData()}
 	v.UpdateLastActivityTime()
 	return v
 }
@@ -71,6 +72,10 @@ func cloneVisitorImpl(src *VisitorImpl) *VisitorImpl {
 
 func (v VisitorImpl) String() string {
 	return "VisitorImpl{}"
+}
+
+func (v *VisitorImpl) TimeStarted() time.Time {
+	return v.data.timeStarted
 }
 
 func (v *VisitorImpl) LastActivityTime() time.Time {
@@ -294,7 +299,7 @@ func (v *VisitorImpl) addData(overwrite bool, data types.BaseData) {
 	case types.DataTypeCBScores:
 		v.data.addCBScores(data, overwrite)
 	case types.DataTypeVisitorVisits:
-		v.data.addVisitorVisits(data)
+		v.data.addVisitorVisits(data, overwrite)
 	case types.DataTypeCustom:
 		v.data.addCustomData(data, overwrite)
 	case types.DataTypePageView:
@@ -337,6 +342,7 @@ func (v *VisitorImpl) Clone() Visitor {
 
 type visitorData struct {
 	mx                  sync.RWMutex
+	timeStarted         time.Time
 	lastActivityTime    time.Time
 	mappingIdentifier   *string
 	userAgent           string
@@ -358,6 +364,12 @@ type visitorData struct {
 	simulatedVariations map[string]*types.ForcedFeatureVariation
 }
 
+func newVisitorData() *visitorData {
+	return &visitorData{
+		timeStarted: time.Now(),
+	}
+}
+
 func (vd *visitorData) enumerateSendableData(f func(types.Sendable) bool) {
 	if (vd.device != nil) && !f(vd.device) {
 		return
@@ -369,6 +381,9 @@ func (vd *visitorData) enumerateSendableData(f func(types.Sendable) bool) {
 		return
 	}
 	if (vd.geolocation != nil) && !f(vd.geolocation) {
+		return
+	}
+	if (vd.visitorVisits != nil) && !f(vd.visitorVisits) {
 		return
 	}
 	vd.mx.RLock()
@@ -402,6 +417,9 @@ func (vd *visitorData) countSendableData() int {
 		count++
 	}
 	if vd.geolocation != nil {
+		count++
+	}
+	if vd.visitorVisits != nil {
 		count++
 	}
 	vd.mx.RLock()
@@ -453,9 +471,9 @@ func (vd *visitorData) addCBScores(data types.BaseData, overwrite bool) {
 		vd.cbscores = cbs
 	}
 }
-func (vd *visitorData) addVisitorVisits(data types.BaseData) {
-	if vv, ok := data.(*types.VisitorVisits); ok {
-		vd.visitorVisits = vv
+func (vd *visitorData) addVisitorVisits(data types.BaseData, overwrite bool) {
+	if vv, ok := data.(*types.VisitorVisits); ok && (overwrite || (vd.visitorVisits == nil)) {
+		vd.visitorVisits = vv.Localize(vd.timeStarted.UnixMilli())
 	}
 }
 func (vd *visitorData) addCustomData(data types.BaseData, overwrite bool) {

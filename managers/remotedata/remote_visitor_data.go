@@ -8,19 +8,25 @@ import (
 )
 
 type remoteVisitorData struct {
-	customDataDict        map[int]types.ICustomData
-	pageViewVisits        map[string]types.PageViewVisit
-	conversions           []*types.Conversion
-	experiments           map[int]*types.AssignedVariation
-	personalizations      map[int]*types.Personalization
-	device                *types.Device
-	browser               *types.Browser
-	operatingSystem       *types.OperatingSystem
-	geolocation           *types.Geolocation
-	previousVisitorVisits *types.VisitorVisits
-	kcsHeat               *types.KcsHeat
-	cbs                   *types.CBScores
-	visitorCode           string
+	filter           types.RemoteVisitorDataFilter
+	customDataDict   map[int]types.ICustomData
+	pageViewVisits   map[string]types.PageViewVisit
+	conversions      []*types.Conversion
+	experiments      map[int]*types.AssignedVariation
+	personalizations map[int]*types.Personalization
+	device           *types.Device
+	browser          *types.Browser
+	operatingSystem  *types.OperatingSystem
+	geolocation      *types.Geolocation
+	visitNumber      int
+	visitorVisits    *types.VisitorVisits
+	kcsHeat          *types.KcsHeat
+	cbs              *types.CBScores
+	visitorCode      string
+}
+
+func newRemoteVisitorData(filter types.RemoteVisitorDataFilter) *remoteVisitorData {
+	return &remoteVisitorData{filter: filter}
 }
 
 func (rvd *remoteVisitorData) MarkVisitorDataAsSent(customDataInfo *types.CustomDataInfo) {
@@ -108,8 +114,8 @@ func (rvd *remoteVisitorData) CollectDataToAdd() []types.BaseData {
 	if rvd.geolocation != nil {
 		dataList = append(dataList, rvd.geolocation)
 	}
-	if rvd.previousVisitorVisits != nil {
-		dataList = append(dataList, rvd.previousVisitorVisits)
+	if rvd.visitorVisits != nil {
+		dataList = append(dataList, rvd.visitorVisits)
 	}
 	if rvd.kcsHeat != nil {
 		dataList = append(dataList, rvd.kcsHeat)
@@ -143,26 +149,26 @@ func (rvd *remoteVisitorData) UnmarshalJSON(data []byte) error {
 
 func (rvd *remoteVisitorData) parseCurrentVisit(m *remoteVisitorDataModel) {
 	if m.CurrentVisit != nil {
-		rvd.parseVisit(m.CurrentVisit)
+		rvd.parseVisit(m.CurrentVisit, false)
 	}
 }
 
 func (rvd *remoteVisitorData) parsePreviousVisits(m *remoteVisitorDataModel) {
-	prevVisitsTimestamps := make([]int64, 0, len(m.PreviousVisits))
+	prevVisits := make([]types.Visit, 0, len(m.PreviousVisits))
 	for _, prevVisit := range m.PreviousVisits {
 		if prevVisit != nil {
-			prevVisitsTimestamps = append(prevVisitsTimestamps, prevVisit.TimeStarted)
-			rvd.parseVisit(prevVisit)
+			prevVisits = append(prevVisits, types.NewVisit(prevVisit.TimeStarted, prevVisit.TimeLastEvent))
+			rvd.parseVisit(prevVisit, true)
 		}
 	}
-	if len(prevVisitsTimestamps) > 0 {
-		rvd.previousVisitorVisits = types.NewVisitorVisits(prevVisitsTimestamps)
+	if len(prevVisits) > 0 {
+		rvd.visitorVisits = types.NewVisitorVisits(prevVisits, rvd.visitNumber)
 	} else {
-		rvd.previousVisitorVisits = nil
+		rvd.visitorVisits = nil
 	}
 }
 
-func (rvd *remoteVisitorData) parseVisit(v *visitModel /*non-nil*/) {
+func (rvd *remoteVisitorData) parseVisit(v *visitModel /*non-nil*/, isPrevVisit bool) {
 	if rvd.visitorCode == "" {
 		rvd.visitorCode = v.VisitorCode
 	}
@@ -172,7 +178,7 @@ func (rvd *remoteVisitorData) parseVisit(v *visitModel /*non-nil*/) {
 	rvd.parsePersonalizations(v.PersonalizationEvents)
 	rvd.parseConversions(v.ConversionEvents)
 	rvd.parseGeolocation(v.GeolocationEvents)
-	rvd.parseStaticData(v.StaticDataEvent)
+	rvd.parseStaticData(v.StaticDataEvent, isPrevVisit)
 }
 
 func (rvd *remoteVisitorData) parseCustomData(customDataEvents []*dataEventModel[customDataModel]) {
@@ -263,20 +269,25 @@ func (rvd *remoteVisitorData) parseGeolocation(geolocationEvents []*dataEventMod
 	rvd.geolocation = types.NewGeolocation(event.Data.Country, event.Data.Region, event.Data.City)
 }
 
-func (rvd *remoteVisitorData) parseStaticData(staticDataEvent *dataEventModel[staticDataModel]) {
-	if (staticDataEvent == nil) || (staticDataEvent.Data == nil) ||
-		(rvd.device != nil) && (rvd.browser != nil) && (rvd.operatingSystem != nil) {
+func (rvd *remoteVisitorData) parseStaticData(staticDataEvent *dataEventModel[staticDataModel], isPrevVisit bool) {
+	if (staticDataEvent == nil) || (staticDataEvent.Data == nil) {
 		return
 	}
-	if rvd.device == nil {
+	if rvd.visitNumber == 0 {
+		rvd.visitNumber = staticDataEvent.Data.VisitNumber
+		if isPrevVisit && (rvd.visitNumber > 0) {
+			rvd.visitNumber++
+		}
+	}
+	if rvd.filter.Device && (rvd.device == nil) {
 		rvd.device = types.NewDevice(types.DeviceType(staticDataEvent.Data.DeviceType))
 	}
-	if rvd.browser == nil {
+	if rvd.filter.Browser && (rvd.browser == nil) {
 		if browserType, ok := types.ParseBrowserType(staticDataEvent.Data.Browser); ok {
 			rvd.browser = types.NewBrowser(browserType, staticDataEvent.Data.BrowserVersion)
 		}
 	}
-	if rvd.operatingSystem == nil {
+	if rvd.filter.OperatingSystem && (rvd.operatingSystem == nil) {
 		if osType, ok := types.ParseOperatingSystemType(staticDataEvent.Data.OsType); ok {
 			rvd.operatingSystem = types.NewOperatingSystem(osType)
 		}
@@ -316,6 +327,7 @@ type remoteVisitorDataModel struct {
 
 type visitModel struct {
 	TimeStarted           int64                                       `json:"timeStarted"`
+	TimeLastEvent         int64                                       `json:"timeLastEvent"`
 	VisitorCode           string                                      `json:"visitorCode"`
 	CustomDataEvents      []*dataEventModel[customDataModel]          `json:"customDataEvents"`
 	PageEvents            []*dataEventModel[pageDataModel]            `json:"pageEvents"`
@@ -364,6 +376,7 @@ type geolocationDataModel struct {
 }
 
 type staticDataModel struct {
+	VisitNumber    int     `json:"visitNumber"`
 	DeviceType     string  `json:"deviceType"`
 	Browser        string  `json:"browser"`
 	BrowserVersion float32 `json:"browserVersion"`

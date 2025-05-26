@@ -24,8 +24,7 @@ func NewVisitNumberTotalCondition(c types.TargetingCondition) *VisitNumberTotalC
 func (c *VisitNumberTotalCondition) CheckTargeting(targetData interface{}) bool {
 	vv, ok := targetData.(*types.VisitorVisits)
 	if ok && (c.Value != -1) {
-		prevVisitsTime := vv.PreviousVisitTimestamps()
-		return c.checkTargeting(len(prevVisitsTime) + 1) // +1 for current visit
+		return c.checkTargeting(len(vv.PrevVisits()) + 1) // +1 for current visit
 	}
 	return false
 }

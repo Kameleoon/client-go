@@ -26,14 +26,14 @@ func NewTimeElapsedSinceVisitCondition(c types.TargetingCondition) *TimeElapsedS
 func (c *TimeElapsedSinceVisitCondition) CheckTargeting(targetData interface{}) bool {
 	vv, ok := targetData.(*types.VisitorVisits)
 	if ok && (vv != nil) && (c.Value != types.UndefinedCountInMillisValue) {
-		prevVisitsTime := vv.PreviousVisitTimestamps()
-		if len(prevVisitsTime) > 0 {
+		prevVisits := vv.PrevVisits()
+		if len(prevVisits) > 0 {
 			now := time.Now().UnixMilli()
 			var visitIndex int
 			if c.Type == types.TargetingFirstVisit {
-				visitIndex = len(prevVisitsTime) - 1
+				visitIndex = len(prevVisits) - 1
 			}
-			return c.checkTargeting(now - prevVisitsTime[visitIndex])
+			return c.checkTargeting(now - prevVisits[visitIndex].TimeStarted())
 		}
 	}
 	return false
