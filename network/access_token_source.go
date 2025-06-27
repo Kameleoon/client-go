@@ -21,7 +21,6 @@ type AccessTokenSourceImpl struct {
 	clientId       string
 	clientSecret   string
 	networkManager NetworkManager
-	logger         logging.Logger
 	cachedToken    *expiringToken // pointer for thread-safe
 	fetching       bool
 }

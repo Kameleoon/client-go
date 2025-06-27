@@ -8,20 +8,37 @@ import (
 )
 
 type FeatureFlag struct {
-	Id                  int                          `json:"id"`
-	FeatureKey          string                       `json:"featureKey"`
-	Variations          []types.VariationFeatureFlag `json:"variations"`
-	DefaultVariationKey string                       `json:"defaultVariationKey"`
-	EnvironmentEnabled  bool                         `json:"environmentEnabled"`
-	Rules               []Rule                       `json:"rules"`
-	MEGroupName         string                       `json:"mutuallyExclusiveGroup"`
+	Id                       int    `json:"id"`
+	FeatureKey               string `json:"featureKey"`
+	DefaultVariationKey      string `json:"defaultVariationKey"`
+	EnvironmentEnabled       bool   `json:"environmentEnabled"`
+	MEGroupName              string `json:"mutuallyExclusiveGroup"`
+	BucketingCustomDataId    int    `json:"bucketingCustomDataId"`
+	BucketingCustomDataIndex *int
+	Variations               []types.VariationFeatureFlag `json:"variations"`
+	Rules                    []Rule                       `json:"rules"`
 }
 
 func (ff FeatureFlag) String() string {
 	return fmt.Sprintf(
-		"FeatureFlag{Id:%v,FeatureKey:'%v',EnvironmentEnabled:%v,DefaultVariationKey:'%v',Rules:%v,MEGroupName:'%v'}",
-		ff.Id, ff.FeatureKey, ff.EnvironmentEnabled, ff.DefaultVariationKey, len(ff.Rules), ff.MEGroupName,
+		"FeatureFlag{Id:%v,FeatureKey:'%v',EnvironmentEnabled:%v,DefaultVariationKey:'%v',Rules:%v,MEGroupName:'%v'"+
+			"BucketingCustomDataIndex:%v}", ff.Id, ff.FeatureKey, ff.EnvironmentEnabled, ff.DefaultVariationKey,
+		len(ff.Rules), ff.MEGroupName, ff.BucketingCustomDataIndex,
 	)
+}
+
+func (ff *FeatureFlag) applySegments(segments map[int]types.SegmentBase) {
+	for i := 0; i < len(ff.Rules); i++ {
+		ff.Rules[i].applySegments(segments)
+	}
+}
+
+func (ff *FeatureFlag) mapCustomDataIndex(cdi *types.CustomDataInfo) {
+	if ff.BucketingCustomDataId != 0 {
+		if index, exists := cdi.GetCustomDataIndexById(ff.BucketingCustomDataId); exists {
+			ff.BucketingCustomDataIndex = &index
+		}
+	}
 }
 
 func (ff *FeatureFlag) GetVariationByKey(key string) (*types.VariationFeatureFlag, bool) {
@@ -70,4 +87,8 @@ func (ff *FeatureFlag) GetRules() []types.Rule {
 
 func (ff *FeatureFlag) GetMEGroupName() string {
 	return ff.MEGroupName
+}
+
+func (ff *FeatureFlag) GetBucketingCustomDataIndex() *int {
+	return ff.BucketingCustomDataIndex
 }

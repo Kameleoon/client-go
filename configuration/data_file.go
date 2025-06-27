@@ -37,13 +37,14 @@ func NewDataFile(configuration Configuration, lastModified string, environment s
 		"CALL: NewDataFile(configuration: %s, lastModified: %s, environment: %s)",
 		configuration, lastModified, environment,
 	)
-	ffs, orderedFFs := collectFeatureFlagsFromConfiguration(configuration)
-	featureFlagById, ruleBySegmentId, ruleInfoByExpId, variationById, experimentIdsWithJSOrCSSVariable :=
-		collectIndices(ffs)
+	segments := collectSegmentsFromConfiguration(configuration)
 	cdi := configuration.CustomDataInfo
 	if cdi == nil {
 		cdi = types.NewCustomDataInfo()
 	}
+	ffs, orderedFFs := collectFeatureFlagsFromConfiguration(configuration, segments, cdi)
+	featureFlagById, ruleBySegmentId, ruleInfoByExpId, variationById, experimentIdsWithJSOrCSSVariable :=
+		collectIndices(ffs)
 	dataFile := &DataFile{
 		lastModified:                     lastModified,
 		customDataInfo:                   cdi,
@@ -67,14 +68,24 @@ func NewDataFile(configuration Configuration, lastModified string, environment s
 	return dataFile
 }
 
+func collectSegmentsFromConfiguration(configuration Configuration) map[int]types.SegmentBase {
+	segments := make(map[int]types.SegmentBase)
+	for _, seg := range configuration.Segments {
+		segments[seg.ID] = seg
+	}
+	return segments
+}
+
 func collectFeatureFlagsFromConfiguration(
-	configuration Configuration,
+	configuration Configuration, segments map[int]types.SegmentBase, cdi *types.CustomDataInfo,
 ) (ffs map[string]*FeatureFlag, ordered []types.FeatureFlag) {
 	n := len(configuration.FeatureFlags)
 	ffs = make(map[string]*FeatureFlag, n)
 	ordered = make([]types.FeatureFlag, n)
 	for i := 0; i < n; i++ {
 		ff := &configuration.FeatureFlags[i]
+		ff.applySegments(segments)
+		ff.mapCustomDataIndex(cdi)
 		ffs[ff.FeatureKey] = ff
 		ordered[i] = ff
 	}

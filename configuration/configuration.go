@@ -12,9 +12,12 @@ type Configuration struct {
 	Holdout        *types.Experiment     `json:"holdout"`
 	Settings       Settings              `json:"configuration"`
 	FeatureFlags   []FeatureFlag         `json:"featureFlags"`
+	Segments       []types.SegmentBase   `json:"segments"`
 }
 
 func (c Configuration) String() string {
-	return fmt.Sprintf("Configuration{CustomDataInfo:%v,Settings:%v,FeatureFlags:'%v'}",
-		c.CustomDataInfo, c.Settings, logging.ObjectToString(c.FeatureFlags))
+	return fmt.Sprintf(
+		"Configuration{CustomDataInfo:%v,Settings:%v,FeatureFlags:%v,Segments:%v}",
+		c.CustomDataInfo, c.Settings, logging.ObjectToString(c.FeatureFlags), logging.ObjectToString(c.Segments),
+	)
 }

@@ -1,8 +1,9 @@
 package types
 
 import (
-	"github.com/Kameleoon/client-go/v3/logging"
 	"encoding/json"
+
+	"github.com/Kameleoon/client-go/v3/logging"
 )
 
 const scopeVisitor = "VISITOR"
@@ -11,6 +12,7 @@ const undefinedIndex = -1
 type CustomDataInfo struct {
 	localOnly              map[int]struct{}
 	visitorScope           map[int]struct{}
+	customDataIndexById    map[int]int
 	mappingIdentifierIndex int
 }
 
@@ -24,6 +26,7 @@ func NewCustomDataInfo() *CustomDataInfo {
 
 func (cdi *CustomDataInfo) UnmarshalJSON(data []byte) error {
 	var cds = []struct {
+		Id                  int    `json:"id"`
 		Index               int    `json:"index"`
 		LocalOnly           bool   `json:"localOnly"`
 		Scope               string `json:"scope"`
@@ -34,6 +37,7 @@ func (cdi *CustomDataInfo) UnmarshalJSON(data []byte) error {
 	}
 	cdi.localOnly = make(map[int]struct{})
 	cdi.visitorScope = make(map[int]struct{})
+	cdi.customDataIndexById = make(map[int]int)
 	cdi.mappingIdentifierIndex = undefinedIndex
 	for _, cd := range cds {
 		if cd.LocalOnly {
@@ -42,6 +46,7 @@ func (cdi *CustomDataInfo) UnmarshalJSON(data []byte) error {
 		if cd.Scope == scopeVisitor {
 			cdi.visitorScope[cd.Index] = struct{}{}
 		}
+		cdi.customDataIndexById[cd.Id] = cd.Index
 		if cd.IsMappingIdentifier {
 			if cdi.mappingIdentifierIndex != undefinedIndex {
 				logging.Warning("More than one mapping identifier is set. " +
@@ -69,4 +74,9 @@ func (cdi *CustomDataInfo) IsVisitorScope(index int) bool {
 
 func (cdi *CustomDataInfo) IsMappingIdentifier(index int) bool {
 	return index == cdi.mappingIdentifierIndex
+}
+
+func (cdi *CustomDataInfo) GetCustomDataIndexById(customDataId int) (index int, exists bool) {
+	index, exists = cdi.customDataIndexById[customDataId]
+	return
 }

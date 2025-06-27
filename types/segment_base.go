@@ -1,7 +1,7 @@
 package types
 
 type SegmentBase struct {
-	ID int `json:"id,string"`
+	ID int `json:"id"`
 	// Name                     string          `json:"name"`
 	// Description              string          `json:"description"`
 	ConditionsData *ConditionsData `json:"conditionsData"`

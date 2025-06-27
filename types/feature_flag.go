@@ -9,4 +9,5 @@ type FeatureFlag interface {
 	GetEnvironmentEnabled() bool
 	GetRules() []Rule
 	GetMEGroupName() string
+	GetBucketingCustomDataIndex() *int
 }

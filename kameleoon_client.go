@@ -663,23 +663,32 @@ func (c *kameleoonClient) calculateVariationKey(evalExp *evaluatedExperiment, de
 	return variationKey
 }
 
-func getCodeForHash(visitor storage.Visitor, visitorCode string) string {
-	// use mappingIdentifier instead of visitorCode if it was set up
-	if (visitor != nil) && (visitor.MappingIdentifier() != nil) {
-		return *visitor.MappingIdentifier()
+func getCodeForHash(visitor storage.Visitor, visitorCode string, bucketingCustomDataIndex *int) string {
+	if visitor != nil {
+		// 1. Try to use the bucketing custom data's value if bucketingCustomDataIndex is defined
+		if bucketingCustomDataIndex != nil {
+			bucketingCustomData := visitor.CustomData().Get(*bucketingCustomDataIndex)
+			if (bucketingCustomData != nil) && (len(bucketingCustomData.Values()) > 0) {
+				return bucketingCustomData.Values()[0]
+			}
+		}
+		// 2. Use mappingIdentifier instead of visitorCode if it was set up
+		if visitor.MappingIdentifier() != nil {
+			return *visitor.MappingIdentifier()
+		}
 	}
 	return visitorCode
 }
 
 func (c *kameleoonClient) evaluateCBScores(
-	visitor storage.Visitor, visitorCode string, rule types.Rule,
+	visitor storage.Visitor, visitorCode string, rule types.Rule, bucketingCustomDataIndex *int,
 ) *evaluatedExperiment {
 	if (visitor == nil) || (visitor.CBScores() == nil) {
 		return nil
 	}
 	logging.Debug(
-		"CALL: kameleoonClient.evaluateCBScores(visitor, visitorCode: %s, rule: %s)",
-		visitorCode, rule,
+		"CALL: kameleoonClient.evaluateCBScores(visitor, visitorCode: %s, rule: %s, bucketingCustomDataIndex: %s)",
+		visitorCode, rule, bucketingCustomDataIndex,
 	)
 	var evalExp *evaluatedExperiment
 	ruleVarsByExp := rule.GetRuleBase().VariationsByExposition
@@ -701,7 +710,7 @@ func (c *kameleoonClient) evaluateCBScores(
 		if len(varByExpInCbs) > 0 {
 			var idx int
 			if len(varByExpInCbs) > 1 { // if more than one varByExp for score -> randomly get
-				codeForHash := getCodeForHash(visitor, visitorCode)
+				codeForHash := getCodeForHash(visitor, visitorCode, bucketingCustomDataIndex)
 				variationHash := utils.ObtainHashRule(
 					codeForHash, rule.GetRuleBase().ExperimentId, rule.GetRuleBase().RespoolTime,
 				)
@@ -715,8 +724,8 @@ func (c *kameleoonClient) evaluateCBScores(
 		}
 	}
 	logging.Debug(
-		"RETURN: kameleoonClient.evaluateCBScores(visitor, visitorCode: %s, rule: %s) -> (evalExp: %s)",
-		visitorCode, rule, evalExp,
+		"RETURN: kameleoonClient.evaluateCBScores(visitor, visitorCode: %s, rule: %s, bucketingCustomDataIndex: %s)"+
+			" -> (evalExp: %s)", visitorCode, rule, bucketingCustomDataIndex, evalExp,
 	)
 	return evalExp
 }
@@ -737,7 +746,7 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 		)
 	}()
 	visitor := c.visitorManager.GetVisitor(visitorCode)
-	codeForHash := getCodeForHash(visitor, visitorCode)
+	codeForHash := getCodeForHash(visitor, visitorCode, featureFlag.GetBucketingCustomDataIndex())
 	// no rules -> return DefaultVariationKey
 	for _, rule := range featureFlag.GetRules() {
 		var forcedVariation *types.ForcedExperimentVariation
@@ -768,7 +777,8 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 			//check main expostion for rule with hashRule
 			if hashRule <= rule.GetRuleBase().Exposition {
 				// check main exposition for rule with hashRule
-				if evalExp = c.evaluateCBScores(visitor, visitorCode, rule); evalExp != nil {
+				evalExp = c.evaluateCBScores(visitor, visitorCode, rule, featureFlag.GetBucketingCustomDataIndex())
+				if evalExp != nil {
 					return
 				}
 				if rule.IsTargetDeliveryType() {
@@ -1020,7 +1030,7 @@ func (c *kameleoonClient) evaluate(
 	}
 	if forcedVariation != nil {
 		evalExp = newEvaluatedExperimentFromForcedVariation(forcedVariation)
-	} else if c.isVisitorNotInHoldout(visitor, visitorCode, track, save) &&
+	} else if c.isVisitorNotInHoldout(visitor, visitorCode, track, save, featureFlag.GetBucketingCustomDataIndex()) &&
 		c.isFFUnrestrictedByMEGroup(visitor, visitorCode, featureFlag) {
 		evalExp = c.calculateVariationRuleForFeature(visitorCode, featureFlag)
 	}
@@ -1047,7 +1057,7 @@ func (c *kameleoonClient) isFFUnrestrictedByMEGroup(
 	)
 	unrestricted := true
 	if meGroup := c.dataManager.DataFile().MEGroups()[meGroupName]; meGroup != nil {
-		codeForHash := getCodeForHash(visitor, visitorCode)
+		codeForHash := getCodeForHash(visitor, visitorCode, featureFlag.GetBucketingCustomDataIndex())
 		meGroupHash := utils.ObtainHashForMEGroup(codeForHash, meGroupName)
 		logging.Debug("Calculated ME group hash %s for code: %s, meGroup: %s", meGroupHash, codeForHash, meGroupName)
 		unrestricted = meGroup.GetFeatureFlagByHash(meGroupHash) == featureFlag
@@ -1059,18 +1069,20 @@ func (c *kameleoonClient) isFFUnrestrictedByMEGroup(
 	return unrestricted
 }
 
-func (c *kameleoonClient) isVisitorNotInHoldout(visitor storage.Visitor, visitorCode string, track, save bool) bool {
+func (c *kameleoonClient) isVisitorNotInHoldout(
+	visitor storage.Visitor, visitorCode string, track, save bool, bucketingCustomDataIndex *int,
+) bool {
 	holdout := c.dataManager.DataFile().Holdout()
 	if holdout == nil {
 		return true
 	}
 	const inHoldoutVariationKey = "in-holdout"
 	logging.Debug(
-		"CALL: kameleoonClient.isVisitorNotInHoldout(visitor, visitorCode: %s, track: %s, save: %s)",
-		visitorCode, track, save,
+		"CALL: kameleoonClient.isVisitorNotInHoldout(visitor, visitorCode: %s, track: %s, save: %s,"+
+			" bucketingCustomDataIndex: %s)", visitorCode, track, save, bucketingCustomDataIndex,
 	)
 	isNotInHoldout := true
-	codeForHash := getCodeForHash(visitor, visitorCode)
+	codeForHash := getCodeForHash(visitor, visitorCode, bucketingCustomDataIndex)
 	variationHash := utils.ObtainHash(codeForHash, holdout.ExperimentId)
 	logging.Debug("Calculated holdout hash %s for code %s", variationHash, codeForHash)
 	if varByExp := holdout.GetVariationByHash(variationHash); varByExp != nil {
@@ -1085,8 +1097,9 @@ func (c *kameleoonClient) isVisitorNotInHoldout(visitor storage.Visitor, visitor
 		}
 	}
 	logging.Debug(
-		"RETURN: kameleoonClient.isVisitorNotInHoldout(visitor, visitorCode: %s, track: %s, save: %s)"+
-			" -> (isNotInHoldout: %s)", visitorCode, track, save, isNotInHoldout,
+		"RETURN: kameleoonClient.isVisitorNotInHoldout(visitor, visitorCode: %s, track: %s, save: %s,"+
+			" bucketingCustomDataIndex: %s) -> (isNotInHoldout: %s)",
+		visitorCode, track, save, bucketingCustomDataIndex, isNotInHoldout,
 	)
 	return isNotInHoldout
 }

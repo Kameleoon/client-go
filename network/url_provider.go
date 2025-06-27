@@ -20,7 +20,7 @@ const (
 	visitorDataPath = "/visit/visitor"
 	getDataPath     = "/map/map"
 
-	configurationApiUrlFormat = "https://%s/%s"
+	configurationApiUrlFormat = "https://%s/v3/%s"
 	rtConfigurationUrlFormat  = "https://%s:8110/sse?%s"
 	accessTokenUrlFormat      = "https://%s/oauth/token"
 	dataApiUrlFormat          = "https://%s%s?%s"

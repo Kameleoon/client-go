@@ -28,12 +28,12 @@ func (rt *RuleType) UnmarshalJSON(data []byte) error {
 
 type RuleBase struct {
 	Experiment
-	Order       int         `json:"order"`
-	Id          int         `json:"id,omitempty"`
-	Type        RuleType    `json:"type"`
-	Segment     SegmentBase `json:"segment"`
-	Exposition  float64     `json:"exposition"`
-	RespoolTime int         `json:"respoolTime,omitempty"`
+	Order       int      `json:"order"`
+	Id          int      `json:"id,omitempty"`
+	Type        RuleType `json:"type"`
+	SegmentId   int      `json:"segmentId"`
+	Exposition  float64  `json:"exposition"`
+	RespoolTime int      `json:"respoolTime,omitempty"`
 }
 
 func (r *RuleBase) IsExperimentType() bool {

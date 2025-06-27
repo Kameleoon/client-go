@@ -22,10 +22,11 @@ const (
 type ContentType string
 
 const (
-	NoneContentType ContentType = ""
-	TextContentType ContentType = "text/plain"
-	JsonContentType ContentType = "application/json"
-	FormContentType ContentType = "application/x-www-form-urlencoded"
+	NoneContentType     ContentType = ""
+	WildcardContentType ContentType = "*/*"
+	TextContentType     ContentType = "text/plain"
+	JsonContentType     ContentType = "application/json"
+	FormContentType     ContentType = "application/x-www-form-urlencoded"
 )
 
 type Request struct {

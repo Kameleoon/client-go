@@ -5,7 +5,6 @@ import (
 
 	"github.com/Kameleoon/client-go/v3/targeting"
 	"github.com/Kameleoon/client-go/v3/types"
-	"github.com/segmentio/encoding/json"
 )
 
 type Rule struct {
@@ -17,15 +16,12 @@ func (r Rule) String() string {
 	return fmt.Sprintf("Rule{Id:%v}", r.Id)
 }
 
-func (r *Rule) UnmarshalJSON(data []byte) error {
-	type RuleHidden Rule
-	if err := json.Unmarshal(data, (*RuleHidden)(r)); err != nil {
-		return err
+func (r *Rule) applySegments(segments map[int]types.SegmentBase) {
+	if r.SegmentId != 0 {
+		if segment, exists := segments[r.SegmentId]; exists {
+			r.TargetingSegment = targeting.NewSegment(&segment)
+		}
 	}
-	if r.Segment.ID != 0 {
-		r.TargetingSegment = targeting.NewSegment(&r.Segment)
-	}
-	return nil
 }
 
 func (r *Rule) GetTargetingSegment() types.Segment {
