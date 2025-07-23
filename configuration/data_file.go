@@ -5,6 +5,7 @@ import (
 
 	"github.com/Kameleoon/client-go/v3/errs"
 	"github.com/Kameleoon/client-go/v3/logging"
+	"github.com/Kameleoon/client-go/v3/targeting"
 	"github.com/Kameleoon/client-go/v3/types"
 )
 
@@ -18,8 +19,9 @@ type DataFile struct {
 	meGroups                         map[string]types.MEGroup
 	environment                      string
 	hasAnyTDRule                     bool
+	segments                         map[int]types.Segment
+	audienceTrackingSegments         []types.Segment
 	featureFlagById                  map[int]types.FeatureFlag
-	ruleBySegmentId                  map[int]types.Rule
 	ruleInfoByExpId                  map[int]types.RuleInfo
 	variationById                    map[int]*types.VariationByExposition
 	experimentIdsWithJSOrCSSVariable map[int]struct{}
@@ -37,14 +39,13 @@ func NewDataFile(configuration Configuration, lastModified string, environment s
 		"CALL: NewDataFile(configuration: %s, lastModified: %s, environment: %s)",
 		configuration, lastModified, environment,
 	)
-	segments := collectSegmentsFromConfiguration(configuration)
+	segments, audienceTrackingSegments := collectSegmentsFromConfiguration(configuration)
 	cdi := configuration.CustomDataInfo
 	if cdi == nil {
 		cdi = types.NewCustomDataInfo()
 	}
 	ffs, orderedFFs := collectFeatureFlagsFromConfiguration(configuration, segments, cdi)
-	featureFlagById, ruleBySegmentId, ruleInfoByExpId, variationById, experimentIdsWithJSOrCSSVariable :=
-		collectIndices(ffs)
+	featureFlagById, ruleInfoByExpId, variationById, experimentIdsWithJSOrCSSVariable := collectIndices(ffs)
 	dataFile := &DataFile{
 		lastModified:                     lastModified,
 		customDataInfo:                   cdi,
@@ -55,8 +56,9 @@ func NewDataFile(configuration Configuration, lastModified string, environment s
 		meGroups:                         makeMEGroups(orderedFFs),
 		environment:                      environment,
 		hasAnyTDRule:                     detIfHasAnyTargetedDeliveryRule(ffs),
+		segments:                         segments,
+		audienceTrackingSegments:         audienceTrackingSegments,
 		featureFlagById:                  featureFlagById,
-		ruleBySegmentId:                  ruleBySegmentId,
 		ruleInfoByExpId:                  ruleInfoByExpId,
 		variationById:                    variationById,
 		experimentIdsWithJSOrCSSVariable: experimentIdsWithJSOrCSSVariable,
@@ -68,16 +70,21 @@ func NewDataFile(configuration Configuration, lastModified string, environment s
 	return dataFile
 }
 
-func collectSegmentsFromConfiguration(configuration Configuration) map[int]types.SegmentBase {
-	segments := make(map[int]types.SegmentBase)
+func collectSegmentsFromConfiguration(configuration Configuration) (map[int]types.Segment, []types.Segment) {
+	segments := make(map[int]types.Segment)
+	var audienceTrackingSegments []types.Segment
 	for _, seg := range configuration.Segments {
-		segments[seg.ID] = seg
+		segment := targeting.NewSegment(seg)
+		segments[seg.ID] = segment
+		if seg.AudienceTracking {
+			audienceTrackingSegments = append(audienceTrackingSegments, segment)
+		}
 	}
-	return segments
+	return segments, audienceTrackingSegments
 }
 
 func collectFeatureFlagsFromConfiguration(
-	configuration Configuration, segments map[int]types.SegmentBase, cdi *types.CustomDataInfo,
+	configuration Configuration, segments map[int]types.Segment, cdi *types.CustomDataInfo,
 ) (ffs map[string]*FeatureFlag, ordered []types.FeatureFlag) {
 	n := len(configuration.FeatureFlags)
 	ffs = make(map[string]*FeatureFlag, n)
@@ -106,6 +113,14 @@ func (df *DataFile) Holdout() *types.Experiment {
 
 func (df *DataFile) Settings() types.Settings {
 	return df.settings
+}
+
+func (df *DataFile) Segments() map[int]types.Segment {
+	return df.segments
+}
+
+func (df *DataFile) AudienceTrackingSegments() []types.Segment {
+	return df.audienceTrackingSegments
 }
 
 func (df *DataFile) FeatureFlags() map[string]*FeatureFlag {
@@ -152,10 +167,6 @@ func (df *DataFile) GetFeatureFlagById(featureFlagId int) types.FeatureFlag {
 	return df.featureFlagById[featureFlagId]
 }
 
-func (df *DataFile) GetRuleBySegmentId(segmentId int) types.Rule {
-	return df.ruleBySegmentId[segmentId]
-}
-
 func (df *DataFile) GetRuleInfoByExpId(experimentId int) (types.RuleInfo, bool) {
 	ruleInfo, exists := df.ruleInfoByExpId[experimentId]
 	return ruleInfo, exists
@@ -185,13 +196,11 @@ func detIfHasAnyTargetedDeliveryRule(featureFlags map[string]*FeatureFlag) bool 
 
 func collectIndices(featureFlags map[string]*FeatureFlag) (
 	featureFlagById map[int]types.FeatureFlag,
-	ruleBySegmentId map[int]types.Rule,
 	ruleInfoByExpId map[int]types.RuleInfo,
 	variationById map[int]*types.VariationByExposition,
 	experimentIdsWithJSOrCSSVariable map[int]struct{},
 ) {
 	featureFlagById = make(map[int]types.FeatureFlag)
-	ruleBySegmentId = make(map[int]types.Rule)
 	ruleInfoByExpId = make(map[int]types.RuleInfo)
 	variationById = make(map[int]*types.VariationByExposition)
 	experimentIdsWithJSOrCSSVariable = make(map[int]struct{})
@@ -199,10 +208,6 @@ func collectIndices(featureFlags map[string]*FeatureFlag) (
 		hasFeatureFlagVariableJsCss := hasFeatureFlagVariableJsCss(ff)
 		for ir := len(ff.Rules) - 1; ir >= 0; ir-- {
 			rulePtr := &ff.Rules[ir]
-			// ruleBySegmentId
-			if rulePtr.TargetingSegment != nil {
-				ruleBySegmentId[rulePtr.TargetingSegment.ID] = rulePtr
-			}
 			// ruleInfoByExpId
 			ruleInfoByExpId[rulePtr.ExperimentId] = types.RuleInfo{FeatureFlag: ff, Rule: rulePtr}
 			// variationById

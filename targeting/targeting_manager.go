@@ -12,7 +12,7 @@ import (
 )
 
 type TargetingManager interface {
-	CheckTargeting(visitorCode string, campaignId int, expOrFForRule types.TargetingObject) bool
+	CheckTargeting(visitorCode string, campaignId int, segment types.Segment) bool
 }
 
 type targetingManager struct {
@@ -30,18 +30,20 @@ func NewTargetingManager(dataManager data.DataManager, visitorManager storage.Vi
 func (tm *targetingManager) CheckTargeting(
 	visitorCode string,
 	campaignId int,
-	expOrFForRule types.TargetingObject,
+	segment types.Segment,
 ) bool {
-	logging.Debug("CALL: targetingManager.CheckTargeting(visitorCode: %s, campaignId: %s, expOrFForRule: %s)",
-		visitorCode, campaignId, expOrFForRule)
-	segment := expOrFForRule.GetTargetingSegment()
+	logging.Debug(
+		"CALL: targetingManager.CheckTargeting(visitorCode: %s, campaignId: %s, segment: %s)",
+		visitorCode, campaignId, segment,
+	)
 	visitor := tm.visitorManager.GetVisitor(visitorCode)
 	targeted := segment == nil || segment.CheckTargeting(func(targetingType types.TargetingType) interface{} {
 		return tm.getConditionData(targetingType, visitor, visitorCode, campaignId)
 	})
 	logging.Debug(
-		"RETURN: targetingManager.CheckTargeting(visitorCode: %s, campaignId: %s, expOrFForRule: %s) -> (targeted: %s)",
-		visitorCode, campaignId, expOrFForRule, targeted)
+		"RETURN: targetingManager.CheckTargeting(visitorCode: %s, campaignId: %s, segment: %s) -> (targeted: %s)",
+		visitorCode, campaignId, segment, targeted,
+	)
 	return targeted
 }
 
@@ -103,12 +105,16 @@ func (tm *targetingManager) getConditionData(
 			conditionData = visitor.Personalizations()
 		}
 	case types.TargetingExclusiveExperiment:
-		targetingDataExclusiveExperiment := conditions.TargetingDataExclusiveExperiment{CurrentExperimentId: campaignId}
-		if visitor != nil {
-			targetingDataExclusiveExperiment.Variations = visitor.Variations()
-			targetingDataExclusiveExperiment.Personalizations = visitor.Personalizations()
+		if campaignId > 0 {
+			targetingDataExclusiveExperiment := conditions.TargetingDataExclusiveExperiment{
+				CurrentExperimentId: campaignId,
+			}
+			if visitor != nil {
+				targetingDataExclusiveExperiment.Variations = visitor.Variations()
+				targetingDataExclusiveExperiment.Personalizations = visitor.Personalizations()
+			}
+			conditionData = targetingDataExclusiveExperiment
 		}
-		conditionData = targetingDataExclusiveExperiment
 	case types.TargetingCookie:
 		if visitor != nil {
 			conditionData = visitor.Cookie()

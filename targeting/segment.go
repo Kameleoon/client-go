@@ -10,10 +10,10 @@ import (
 type Segment struct {
 	ID   int
 	Tree *Tree
-	base *types.SegmentBase
+	base types.SegmentBase
 }
 
-func NewSegment(s *types.SegmentBase) *Segment {
+func NewSegment(s types.SegmentBase) *Segment {
 	return &Segment{
 		ID:   s.ID,
 		Tree: NewTree(s.ConditionsData),
@@ -32,7 +32,7 @@ func (s Segment) String() string {
 }
 
 func (s *Segment) Data() *types.SegmentBase {
-	return s.base
+	return &s.base
 }
 
 func (s *Segment) CheckTargeting(data types.TargetingDataGetter) bool {
@@ -43,5 +43,5 @@ func (s *Segment) CheckTargeting(data types.TargetingDataGetter) bool {
 }
 
 func (s *Segment) GetSegmentBase() *types.SegmentBase {
-	return s.base
+	return &s.base
 }

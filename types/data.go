@@ -31,4 +31,5 @@ const (
 	DataTypeKcsHeat                   DataType = "KCS_HEAT"
 	DataTypeUniqueIdentifier          DataType = "UNIQUE_IDENTIFIER"
 	DataTypeCBScores                  DataType = "CBS"
+	DataTypeTargetedSegment           DataType = "TARGETED_SEGMENT"
 )

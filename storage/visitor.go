@@ -37,6 +37,7 @@ type Visitor interface {
 	Conversions() DataCollectionStorage[*types.Conversion]
 	Variations() DataMapStorage[int, *types.AssignedVariation]
 	Personalizations() DataMapStorage[int, *types.Personalization]
+	TargetedSegments() DataMapStorage[int, *types.TargetedSegment]
 
 	AddData(data ...types.Data)
 	AddBaseData(overwrite bool, data ...types.BaseData)
@@ -208,6 +209,13 @@ func (v *VisitorImpl) Personalizations() DataMapStorage[int, *types.Personalizat
 	return storage
 }
 
+func (v *VisitorImpl) TargetedSegments() DataMapStorage[int, *types.TargetedSegment] {
+	logging.Debug("CALL: VisitorImpl.TargetedSegments()")
+	storage := NewDataMapStorageImpl(&v.data.mx, &v.data.targetedSegments)
+	logging.Debug("RETURN: VisitorImpl.TargetedSegments() -> (targetedSegments: %s)", storage)
+	return storage
+}
+
 func (v *VisitorImpl) GetForcedFeatureVariation(featureKey string) *types.ForcedFeatureVariation {
 	logging.Debug("CALL: VisitorImpl.GetForcedFeatureVariation(featureKey: %s)", featureKey)
 	var variation *types.ForcedFeatureVariation
@@ -312,6 +320,8 @@ func (v *VisitorImpl) addData(overwrite bool, data types.BaseData) {
 		v.data.addVariation(data, overwrite)
 	case types.DataTypePersonalization:
 		v.data.addPersonalization(data, overwrite)
+	case types.DataTypeTargetedSegment:
+		v.data.addTargetedSegment(data)
 	case types.DataTypeForcedFeatureVariation:
 		v.data.addForcedFeatureVariation(data)
 	case types.DataTypeForcedExperimentVariation:
@@ -360,6 +370,7 @@ type visitorData struct {
 	conversions         []*types.Conversion
 	variations          map[int]*types.AssignedVariation
 	personalizations    map[int]*types.Personalization
+	targetedSegments    map[int]*types.TargetedSegment
 	forcedVariations    map[int]*types.ForcedExperimentVariation
 	simulatedVariations map[string]*types.ForcedFeatureVariation
 }
@@ -400,6 +411,10 @@ func (vd *visitorData) enumerateSendableData(f func(types.Sendable) bool) {
 		func(av *types.AssignedVariation) bool { return f(av) }) {
 		return
 	}
+	if !enumerateMap[int, *types.TargetedSegment](vd.targetedSegments,
+		func(ts *types.TargetedSegment) bool { return f(ts) }) {
+		return
+	}
 	if !enumerateSlice[*types.Conversion](vd.conversions,
 		func(c *types.Conversion) bool { return f(c) }) {
 		return
@@ -426,8 +441,9 @@ func (vd *visitorData) countSendableData() int {
 	defer vd.mx.RUnlock()
 	count += len(vd.customDataMap)
 	count += len(vd.pageViewVisits)
-	count += len(vd.conversions)
 	count += len(vd.variations)
+	count += len(vd.targetedSegments)
+	count += len(vd.conversions)
 	return count
 }
 
@@ -531,6 +547,14 @@ func (vd *visitorData) addPersonalization(data types.BaseData, overwrite bool) {
 			}
 			vd.personalizations[p.Id()] = p
 		}
+	}
+}
+func (vd *visitorData) addTargetedSegment(data types.BaseData) {
+	if ts, ok := data.(*types.TargetedSegment); ok {
+		if vd.targetedSegments == nil {
+			vd.targetedSegments = make(map[int]*types.TargetedSegment, 1)
+		}
+		vd.targetedSegments[ts.Id()] = ts
 	}
 }
 func (vd *visitorData) addForcedFeatureVariation(data types.BaseData) {

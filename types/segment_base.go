@@ -6,7 +6,7 @@ type SegmentBase struct {
 	// Description              string          `json:"description"`
 	ConditionsData *ConditionsData `json:"conditionsData"`
 	// SiteID                   int             `json:"siteId"`
-	// AudienceTracking         bool            `json:"audienceTracking"`
+	AudienceTracking bool `json:"audienceTracking"`
 	// AudienceTrackingEditable bool            `json:"audienceTrackingEditable"`
 	// IsFavorite               bool            `json:"isFavorite"`
 	// DateCreated              TimeNoTZ        `json:"dateCreated"`

@@ -27,7 +27,7 @@ func (ff FeatureFlag) String() string {
 	)
 }
 
-func (ff *FeatureFlag) applySegments(segments map[int]types.SegmentBase) {
+func (ff *FeatureFlag) applySegments(segments map[int]types.Segment) {
 	for i := 0; i < len(ff.Rules); i++ {
 		ff.Rules[i].applySegments(segments)
 	}

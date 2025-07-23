@@ -7,7 +7,7 @@ import (
 	"github.com/Kameleoon/client-go/v3/utils"
 )
 
-const assignedVariationType = "experiment"
+const assignedVariationEventType = "experiment"
 
 type AssignedVariation struct {
 	duplicationUnsafeSendableBase
@@ -73,7 +73,7 @@ func (av *AssignedVariation) QueryEncode() string {
 		return ""
 	}
 	qb := utils.NewQueryBuilder()
-	qb.Append(utils.QPEventType, assignedVariationType)
+	qb.Append(utils.QPEventType, assignedVariationEventType)
 	qb.Append(utils.QPExperimentId, fmt.Sprint(av.experimentId))
 	qb.Append(utils.QPVariationId, fmt.Sprint(av.variationId))
 	qb.Append(utils.QPNonce, nonce)

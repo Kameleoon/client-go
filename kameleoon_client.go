@@ -309,6 +309,17 @@ type KameleoonClient interface {
 	SetForcedVariation(
 		visitorCode string, experimentId int, variationKey string, params ...SetForcedVariationOptParams,
 	) error
+
+	// Evaluates the visitor against all available Audiences Explorer segments and tracks those that match.
+	// A detailed analysis of segment performance can then be performed directly in Audiences Explorer.
+	//
+	// Parameters:
+	// - visitorCode: The unique visitor code identifying the visitor.
+	//
+	// May return one of the following errors:
+	// - VisitorCodeInvalid:
+	//   The provided visitor code is invalid.
+	EvaluateAudiences(visitorCode string) error
 }
 
 type kameleoonClient struct {
@@ -759,7 +770,7 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 		}
 
 		//check if visitor is targeted for rule, else next rule
-		if c.targetingManager.CheckTargeting(visitorCode, rule.GetRuleBase().ExperimentId, rule) {
+		if c.targetingManager.CheckTargeting(visitorCode, rule.GetRuleBase().ExperimentId, rule.GetTargetingSegment()) {
 			if forcedVariation != nil {
 				// Forcing experiment variation in targeting-only mode
 				return newEvaluatedExperimentFromVarByExpRule(forcedVariation.VarByExp(), rule)
@@ -1436,6 +1447,27 @@ func (c *kameleoonClient) SetForcedVariation(
 	} else {
 		visitor.ResetForcedVariation(experimentId)
 	}
+	return
+}
+
+func (c *kameleoonClient) EvaluateAudiences(visitorCode string) (err error) {
+	logging.Info("CALL: kameleoonClient.EvaluateAudiences(visitorCode: %s)", visitorCode)
+	defer func() {
+		logging.Info("RETURN: kameleoonClient.EvaluateAudiences(visitorCode: %s) -> (error: %s)", visitorCode, err)
+	}()
+	if err = utils.ValidateVisitorCode(visitorCode); err != nil {
+		return
+	}
+	var segments []types.BaseData
+	for _, seg := range c.dataManager.DataFile().AudienceTrackingSegments() {
+		if c.targetingManager.CheckTargeting(visitorCode, 0, seg) {
+			segments = append(segments, types.NewTargetedSegment(seg.GetSegmentBase().ID))
+		}
+	}
+	if len(segments) > 0 {
+		c.visitorManager.GetOrCreateVisitor(visitorCode).AddBaseData(true, segments...)
+	}
+	c.trackingManager.AddVisitorCode(visitorCode)
 	return
 }
 

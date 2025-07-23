@@ -72,6 +72,7 @@ const (
 	QPRevenue                 = "revenue"
 	QPSdkName                 = "sdkName"
 	QPSdkVersion              = "sdkVersion"
+	QPSegmentId               = "id"
 	QPSiteCode                = "siteCode"
 	QPStaticData              = "staticData"
 	QPTimeSincePreviousVisit  = "timeSincePreviousVisit"

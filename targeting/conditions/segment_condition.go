@@ -25,11 +25,7 @@ func (c *SegmentCondition) CheckTargeting(targetData interface{}) bool {
 	if !ok || (targetingData.DataFile == nil) || (targetingData.TargetingDataGetter == nil) {
 		return false
 	}
-	rule := targetingData.DataFile.GetRuleBySegmentId(c.SegmentId)
-	if rule == nil {
-		return false
-	}
-	segment := rule.GetTargetingSegment()
+	segment := targetingData.DataFile.Segments()[c.SegmentId]
 	if segment == nil {
 		return false
 	}
