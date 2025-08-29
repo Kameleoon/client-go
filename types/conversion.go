@@ -81,7 +81,7 @@ func (c *Conversion) QueryEncode() string {
 	qb.Append(utils.QPRevenue, strconv.FormatFloat(c.revenue, 'f', -1, 64))
 	qb.Append(utils.QPNegative, strconv.FormatBool(c.negative))
 	qb.Append(utils.QPNonce, nonce)
-	if c.metadata != nil && len(c.metadata) > 0 {
+	if len(c.metadata) > 0 {
 		qb.Append(utils.QPMetadata, c.encodeMetadata())
 	}
 	return qb.String()
@@ -96,7 +96,7 @@ func (c *Conversion) encodeMetadata() string {
 		if mcd == nil {
 			continue
 		}
-		if _, contains := addedIndices[mcd.ID()]; contains {
+		if _, contains := addedIndices[mcd.Index()]; contains {
 			continue
 		}
 		if addComma {
@@ -105,7 +105,7 @@ func (c *Conversion) encodeMetadata() string {
 			addComma = true
 		}
 		writeCustomDataMetadata(mcd, &sb)
-		addedIndices[mcd.ID()] = struct{}{}
+		addedIndices[mcd.Index()] = struct{}{}
 	}
 	sb.WriteRune('}')
 	return sb.String()
@@ -113,7 +113,7 @@ func (c *Conversion) encodeMetadata() string {
 
 func writeCustomDataMetadata(cd *CustomData, sb *strings.Builder) {
 	sb.WriteRune('"')
-	sb.WriteString(strconv.Itoa(cd.ID()))
+	sb.WriteString(strconv.Itoa(cd.Index()))
 	sb.WriteString("\":[")
 	for i, value := range cd.Values() {
 		if i > 0 {

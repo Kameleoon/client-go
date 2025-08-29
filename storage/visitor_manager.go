@@ -129,8 +129,15 @@ func (vm *VisitorManagerImpl) handleCustomData(
 	cdi *types.CustomDataInfo,
 	cd *types.CustomData,
 ) types.Data {
+	if cd.Name() != "" {
+		cdIndex, exists := cdi.GetCustomDataIndexByName(cd.Name())
+		if !exists {
+			return nil
+		}
+		cd = cd.NamedToIndexed(cdIndex)
+	}
 	// We shouldn't send custom data with local only type
-	if (cdi != nil) && cdi.IsLocalOnly(cd.ID()) {
+	if cdi.IsLocalOnly(cd.Index()) {
 		cd.MarkAsSent()
 	}
 	// If mappingIdentifier is passed, we should link anonymous visitor with real unique userId.
@@ -149,7 +156,7 @@ func (vm *VisitorManagerImpl) handleCustomData(
 }
 
 func isMappingIdentifier(cdi *types.CustomDataInfo, cd types.ICustomData) bool {
-	return (cdi != nil) && (cd.ID() == cdi.MappingIdentifierIndex()) && (len(cd.Values()) > 0) && (cd.Values()[0] != "")
+	return (cd.Index() == cdi.MappingIdentifierIndex()) && (len(cd.Values()) > 0) && (cd.Values()[0] != "")
 }
 
 func (vm *VisitorManagerImpl) Enumerate(f func(string, Visitor) bool) {

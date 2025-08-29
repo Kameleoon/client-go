@@ -287,6 +287,9 @@ func (v *VisitorImpl) AddBaseData(overwrite bool, data ...types.BaseData) {
 	logging.Debug("RETURN: VisitorImpl.AddBaseData(overwrite: %s, data: %s)", overwrite, data)
 }
 func (v *VisitorImpl) addData(overwrite bool, data types.BaseData) {
+	if data == nil {
+		return
+	}
 	logging.Debug("CALL: VisitorImpl.AddData(overwrite: %s, data: %s)", overwrite, data)
 	dataType := data.DataType()
 	switch dataType {
@@ -494,11 +497,11 @@ func (vd *visitorData) addVisitorVisits(data types.BaseData, overwrite bool) {
 }
 func (vd *visitorData) addCustomData(data types.BaseData, overwrite bool) {
 	if cd, ok := data.(types.ICustomData); ok {
-		if overwrite || (vd.customDataMap[cd.ID()] == nil) {
+		if overwrite || (vd.customDataMap[cd.Index()] == nil) {
 			if vd.customDataMap == nil {
 				vd.customDataMap = make(map[int]types.ICustomData, 1)
 			}
-			vd.customDataMap[cd.ID()] = cd
+			vd.customDataMap[cd.Index()] = cd
 		}
 	}
 }

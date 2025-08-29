@@ -13,6 +13,7 @@ type CustomDataInfo struct {
 	localOnly              map[int]struct{}
 	visitorScope           map[int]struct{}
 	customDataIndexById    map[int]int
+	customDataIndexByName  map[string]int
 	mappingIdentifierIndex int
 }
 
@@ -28,6 +29,7 @@ func (cdi *CustomDataInfo) UnmarshalJSON(data []byte) error {
 	var cds = []struct {
 		Id                  int    `json:"id"`
 		Index               int    `json:"index"`
+		Name                string `json:"name"`
 		LocalOnly           bool   `json:"localOnly"`
 		Scope               string `json:"scope"`
 		IsMappingIdentifier bool   `json:"isMappingIdentifier"`
@@ -38,6 +40,7 @@ func (cdi *CustomDataInfo) UnmarshalJSON(data []byte) error {
 	cdi.localOnly = make(map[int]struct{})
 	cdi.visitorScope = make(map[int]struct{})
 	cdi.customDataIndexById = make(map[int]int)
+	cdi.customDataIndexByName = make(map[string]int)
 	cdi.mappingIdentifierIndex = undefinedIndex
 	for _, cd := range cds {
 		if cd.LocalOnly {
@@ -47,6 +50,9 @@ func (cdi *CustomDataInfo) UnmarshalJSON(data []byte) error {
 			cdi.visitorScope[cd.Index] = struct{}{}
 		}
 		cdi.customDataIndexById[cd.Id] = cd.Index
+		if cd.Name != "" {
+			cdi.customDataIndexByName[cd.Name] = cd.Index
+		}
 		if cd.IsMappingIdentifier {
 			if cdi.mappingIdentifierIndex != undefinedIndex {
 				logging.Warning("More than one mapping identifier is set. " +
@@ -78,5 +84,10 @@ func (cdi *CustomDataInfo) IsMappingIdentifier(index int) bool {
 
 func (cdi *CustomDataInfo) GetCustomDataIndexById(customDataId int) (index int, exists bool) {
 	index, exists = cdi.customDataIndexById[customDataId]
+	return
+}
+
+func (cdi *CustomDataInfo) GetCustomDataIndexByName(customDataName string) (index int, exists bool) {
+	index, exists = cdi.customDataIndexByName[customDataName]
 	return
 }
