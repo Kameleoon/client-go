@@ -70,6 +70,10 @@ func (c *Conversion) Negative() bool {
 	return c.negative
 }
 
+func (c *Conversion) Metadata() []*CustomData {
+	return c.metadata
+}
+
 func (c *Conversion) QueryEncode() string {
 	nonce := c.Nonce()
 	if len(nonce) == 0 {

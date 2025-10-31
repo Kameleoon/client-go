@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.15.1 - 2025-10-31
+### Bug fixes
+* Fixed an issue where [`Conversion`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#conversion)'s metadata initialized with a name was not tracked.
+
 ## 3.15.0 - 2025-08-29
 ### Features
 * Added an `overwrite` flag to [`CustomData`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#customdata), used as the `overwrite` parameter during tracking.

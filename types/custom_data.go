@@ -20,6 +20,7 @@ type ICustomData interface {
 }
 
 const customDataEventType = "customData"
+const CustomDataUndefinedIndex = -1
 
 type CustomDataOptParams struct {
 	overwrite bool
@@ -59,11 +60,11 @@ func NewCustomDataWithOptParams(index int, params CustomDataOptParams, values ..
 }
 
 func NewNamedCustomData(name string, values ...string) *CustomData {
-	return newCustomData(-1, name, true, values)
+	return newCustomData(CustomDataUndefinedIndex, name, true, values)
 }
 
 func NewNamedCustomDataWithOptParams(name string, params CustomDataOptParams, values ...string) *CustomData {
-	return newCustomData(-1, name, params.overwrite, values)
+	return newCustomData(CustomDataUndefinedIndex, name, params.overwrite, values)
 }
 
 func (cd *CustomData) NamedToIndexed(index int) *CustomData {

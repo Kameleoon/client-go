@@ -113,8 +113,11 @@ func (vm *VisitorManagerImpl) AddData(visitorCode string, data ...types.Data) Vi
 	cdi := vm.dataManager.DataFile().CustomDataInfo()
 	if cdi != nil {
 		for i, d := range data {
-			if cd, ok := d.(*types.CustomData); ok {
-				data[i] = vm.handleCustomData(visitorCode, visitor, cdi, cd)
+			switch dataImpl := d.(type) {
+			case *types.CustomData:
+				data[i] = vm.processCustomData(visitorCode, visitor, cdi, dataImpl)
+			case *types.Conversion:
+				data[i] = vm.processConversion(dataImpl, cdi)
 			}
 		}
 	}
@@ -123,18 +126,17 @@ func (vm *VisitorManagerImpl) AddData(visitorCode string, data ...types.Data) Vi
 	return visitor
 }
 
-func (vm *VisitorManagerImpl) handleCustomData(
+func (vm *VisitorManagerImpl) processCustomData(
 	visitorCode string,
 	visitor *VisitorImpl,
 	cdi *types.CustomDataInfo,
 	cd *types.CustomData,
 ) types.Data {
-	if cd.Name() != "" {
-		cdIndex, exists := cdi.GetCustomDataIndexByName(cd.Name())
-		if !exists {
-			return nil
-		}
-		cd = cd.NamedToIndexed(cdIndex)
+	if mappedCd := vm.tryMapCustomDataIndexByName(cd, cdi); mappedCd == nil {
+		logging.Error("%s is invalid and will be ignored", cd)
+		return nil
+	} else {
+		cd = mappedCd
 	}
 	// We shouldn't send custom data with local only type
 	if cdi.IsLocalOnly(cd.Index()) {
@@ -153,6 +155,35 @@ func (vm *VisitorManagerImpl) handleCustomData(
 		return types.NewMappingIdentifier(cd)
 	}
 	return cd
+}
+
+func (vm *VisitorManagerImpl) processConversion(c *types.Conversion, cdi *types.CustomDataInfo) types.Data {
+	metadata := c.Metadata()
+	for i, cd := range metadata {
+		cd = vm.tryMapCustomDataIndexByName(cd, cdi)
+		if cd == nil {
+			logging.Warning("Conversion metadata %s is invalid", metadata[i])
+		}
+		metadata[i] = cd
+	}
+	return c
+}
+
+func (vm *VisitorManagerImpl) tryMapCustomDataIndexByName(
+	cd *types.CustomData,
+	cdi *types.CustomDataInfo,
+) *types.CustomData {
+	if cd.Index() != types.CustomDataUndefinedIndex {
+		return cd
+	}
+	if cd.Name() == "" {
+		return nil
+	}
+	cdIndex, exists := cdi.GetCustomDataIndexByName(cd.Name())
+	if exists {
+		return cd.NamedToIndexed(cdIndex)
+	}
+	return nil
 }
 
 func isMappingIdentifier(cdi *types.CustomDataInfo, cd types.ICustomData) bool {
