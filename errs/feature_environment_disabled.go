@@ -15,3 +15,7 @@ func NewFeatureEnvironmentDisabled(featureKey string, environment string) *Featu
 	msg := fmt.Sprintf("Feature '%s' disabled for %s", featureKey, environment)
 	return &FeatureEnvironmentDisabled{NewFeatureError(msg)}
 }
+
+func NewFeatureEnvironmentDisabledWithMessage(msg string) *FeatureEnvironmentDisabled {
+	return &FeatureEnvironmentDisabled{NewFeatureError(msg)}
+}

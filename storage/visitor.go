@@ -13,8 +13,8 @@ type Visitor interface {
 	LastActivityTime() time.Time
 	UpdateLastActivityTime()
 
-	LegalConsent() bool
-	SetLegalConsent(consent bool)
+	LegalConsent() types.LegalConsent
+	SetLegalConsent(consent types.LegalConsent)
 
 	IsUniqueIdentifier() bool
 	MappingIdentifier() *string
@@ -94,10 +94,10 @@ func (v *VisitorImpl) IsUniqueIdentifier() bool {
 	return v.isUniqueIdentifier
 }
 
-func (v *VisitorImpl) LegalConsent() bool {
+func (v *VisitorImpl) LegalConsent() types.LegalConsent {
 	return v.data.legalConsent
 }
-func (v *VisitorImpl) SetLegalConsent(consent bool) {
+func (v *VisitorImpl) SetLegalConsent(consent types.LegalConsent) {
 	v.data.legalConsent = consent
 }
 
@@ -359,7 +359,7 @@ type visitorData struct {
 	lastActivityTime    time.Time
 	mappingIdentifier   *string
 	userAgent           string
-	legalConsent        bool
+	legalConsent        types.LegalConsent
 	device              *types.Device
 	browser             *types.Browser
 	cookie              *types.Cookie

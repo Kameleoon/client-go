@@ -86,7 +86,8 @@ func (tb *TrackingBuilder) Build() {
 }
 
 func (tb *TrackingBuilder) isConsentGiven(visitor storage.Visitor) bool {
-	return !tb.dataFile.Settings().IsConsentRequired() || ((visitor != nil) && visitor.LegalConsent())
+	return !tb.dataFile.Settings().IsConsentRequired() ||
+		((visitor != nil) && (visitor.LegalConsent() == types.LegalConsentGiven))
 }
 
 func (tb *TrackingBuilder) collectTrackingData(

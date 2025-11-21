@@ -80,11 +80,8 @@ func (cm *CookieManagerImpl) Update(visitorCode string, consent bool, response *
 	logging.Debug("CALL: CookieManagerImpl.Update(visitorCode: %s, consent: %s, response)", visitorCode, consent)
 	if consent {
 		cm.add(visitorCode, response)
-	} else {
-		cm.remove(response)
 	}
-	logging.Debug("RETURN: CookieManagerImpl.Update(visitorCode: %s, consent: %s, response)",
-		visitorCode, consent)
+	logging.Debug("RETURN: CookieManagerImpl.Update(visitorCode: %s, consent: %s, response)", visitorCode, consent)
 }
 
 func (cm *CookieManagerImpl) GetOrAdd(request *fasthttp.Request, response *fasthttp.Response,
@@ -130,7 +127,7 @@ func (cm *CookieManagerImpl) getOrAddVisitorCode(
 	err := utils.ValidateVisitorCode(vc)
 	if err != nil {
 		vc = ""
-	} else {
+	} else if !cm.dataManager.IsVisitorCodeManaged() {
 		cm.add(vc, response)
 	}
 	return vc, err
@@ -149,14 +146,6 @@ func (cm *CookieManagerImpl) add(visitorCode string, response *fasthttp.Response
 	response.Header.SetCookie(ck)
 	logging.Debug("For %s was added cookies: %s", visitorCode, ck)
 	logging.Debug("RETURN: CookieManagerImpl.add(visitorCode: %s, response)", visitorCode)
-}
-
-func (cm *CookieManagerImpl) remove(response *fasthttp.Response) {
-	logging.Debug("CALL: CookieManagerImpl.remove(response)")
-	if cm.dataManager.IsVisitorCodeManaged() {
-		response.Header.DelCookie(visitorCodeCookie)
-	}
-	logging.Debug("RETURN: CookieManagerImpl.remove(response)")
 }
 
 func (cm *CookieManagerImpl) processSimulatedVariations(request *fasthttp.Request, visitorCode string) {

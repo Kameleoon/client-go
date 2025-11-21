@@ -80,6 +80,7 @@ type NetProvider interface {
 
 const (
 	AuthorizationHeader = "Authorization"
+	MaxRedirectsCount   = 8
 )
 
 type NetProviderImpl struct {
@@ -115,7 +116,8 @@ func (np *NetProviderImpl) Call(request *Request, headersToRead []string) Respon
 	}
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
-	err := np.client.DoTimeout(req, resp, request.Timeout)
+	err := np.doTimeoutRedirects(req, resp, MaxRedirectsCount, request.Timeout)
+	// err := np.client.DoTimeout(req, resp, request.Timeout)
 	var response Response
 	if err == nil {
 		headersRead := np.readHeaders(resp, headersToRead)
@@ -146,4 +148,34 @@ func (*NetProviderImpl) readHeaders(resp *fasthttp.Response, headersToRead []str
 		headers[h] = string(resp.Header.Peek(h))
 	}
 	return headers
+}
+
+func (np *NetProviderImpl) doTimeoutRedirects(
+	req *fasthttp.Request,
+	resp *fasthttp.Response,
+	redirectsLeft int,
+	timeout time.Duration,
+) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		if err := np.client.DoDeadline(req, resp, deadline); err != nil {
+			return err
+		}
+		code := resp.StatusCode()
+		if (code != 307) && (code != 308) {
+			return nil
+		}
+		// redirection
+		if redirectsLeft == 0 {
+			return fasthttp.ErrTooManyRedirects
+		}
+		// supports only absolute urls
+		loc := resp.Header.Peek("Location")
+		if len(loc) == 0 {
+			// redirection to nowhere
+			return nil
+		}
+		req.URI().UpdateBytes(loc)
+		redirectsLeft--
+	}
 }
