@@ -77,8 +77,8 @@ func (ff *FeatureFlag) GetEnvironmentEnabled() bool {
 	return ff.EnvironmentEnabled
 }
 
-func (ff *FeatureFlag) GetRules() []types.Rule {
-	rules := make([]types.Rule, len(ff.Rules))
+func (ff *FeatureFlag) GetRules() []types.IRule {
+	rules := make([]types.IRule, len(ff.Rules))
 	for i := len(ff.Rules) - 1; i >= 0; i-- {
 		rules[i] = &ff.Rules[i]
 	}

@@ -189,7 +189,7 @@ func (cm *CookieManagerImpl) parseSimulatedVariations(
 }
 
 func simulatedVariationFromDataFile(
-	dataFile types.DataFile, ffKey string, svm simulatedVariationModel,
+	dataFile types.IDataFile, ffKey string, svm simulatedVariationModel,
 ) (*types.ForcedFeatureVariation, error) {
 	ff, ffExists := dataFile.GetFeatureFlags()[ffKey]
 	if !ffExists {

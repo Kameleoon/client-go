@@ -609,7 +609,7 @@ func (c *kameleoonClient) GetFeatureVariationKey(
 // getFeatureVariationKey is a helper method for getting variation key for feature flag
 func (c *kameleoonClient) getFeatureVariationKey(
 	visitorCode string, featureKey string,
-) (featureFlag types.FeatureFlag, variationKey string, err error) {
+) (featureFlag types.IFeatureFlag, variationKey string, err error) {
 	logging.Debug(
 		"CALL: kameleoonClient.getFeatureVariationKey(visitorCode: %s, featureKey: %s)", visitorCode, featureKey,
 	)
@@ -700,7 +700,7 @@ func getCodeForHash(visitor storage.Visitor, visitorCode string, bucketingCustom
 }
 
 func (c *kameleoonClient) evaluateCBScores(
-	visitor storage.Visitor, visitorCode string, rule types.Rule, bucketingCustomDataIndex *int,
+	visitor storage.Visitor, visitorCode string, rule types.IRule, bucketingCustomDataIndex *int,
 ) *evaluatedExperiment {
 	if (visitor == nil) || (visitor.CBScores() == nil) {
 		return nil
@@ -751,7 +751,7 @@ func (c *kameleoonClient) evaluateCBScores(
 
 // getVariationRuleForFeature is a helper method for calculate variation key for feature flag
 func (c *kameleoonClient) calculateVariationRuleForFeature(
-	visitorCode string, featureFlag types.FeatureFlag,
+	visitorCode string, featureFlag types.IFeatureFlag,
 ) (evalExp *evaluatedExperiment, err error) {
 	logging.Debug(
 		"CALL: kameleoonClient.calculateVariationRuleForFeature(visitorCode: %s, featureFlag: %s)",
@@ -765,14 +765,7 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 		)
 	}()
 	visitor := c.visitorManager.GetVisitor(visitorCode)
-	dataFile := c.dataManager.DataFile()
-	consent := types.LegalConsentGiven
-	if dataFile.Settings().IsConsentRequired() {
-		consent = types.LegalConsentUnknown
-		if visitor != nil {
-			consent = visitor.LegalConsent()
-		}
-	}
+	consent, blockingBehaviour := c.getConsentAndBlockingBehaviour(visitor)
 	codeForHash := getCodeForHash(visitor, visitorCode, featureFlag.GetBucketingCustomDataIndex())
 	// no rules -> return DefaultVariationKey
 	for _, rule := range featureFlag.GetRules() {
@@ -806,7 +799,6 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 		if hashRule <= rule.GetRuleBase().Exposition {
 			// Checking if the evaluation is blocked due to the consent policy
 			if (consent == types.LegalConsentNotGiven) && (rule.GetRuleBase().Type == types.RuleTypeExperimentation) {
-				blockingBehaviour := dataFile.Settings().BlockingBehaviourIfConsentNotGiven()
 				if blockingBehaviour == types.PartiallyBlockedByConsent {
 					return nil, nil
 				}
@@ -844,6 +836,21 @@ func (c *kameleoonClient) calculateVariationRuleForFeature(
 		}
 	}
 	return nil, nil
+}
+
+func (c *kameleoonClient) getConsentAndBlockingBehaviour(visitor storage.Visitor) (types.LegalConsent, types.ConsentBlockingBehaviour) {
+	dataFile := c.dataManager.DataFile()
+
+	consent := types.LegalConsentGiven
+	if dataFile.Settings().IsConsentRequired() {
+		consent = types.LegalConsentUnknown
+		if visitor != nil {
+			consent = visitor.LegalConsent()
+		}
+	}
+	behaviour := dataFile.Settings().BlockingBehaviourIfConsentNotGiven()
+
+	return consent, behaviour
 }
 
 // func (c *kameleoonClient) getSavedVariationForRule(visitorCode string, rule *configuration.Rule) (*types.VariationByExposition, bool) {
@@ -955,7 +962,7 @@ func (c *kameleoonClient) isFeatureActive(
 		}
 		return false, err
 	}
-	var featureFlag types.FeatureFlag
+	var featureFlag types.IFeatureFlag
 	featureFlag, err = c.dataManager.DataFile().GetFeatureFlag(featureKey)
 	if ok, err := ignoreFeatureEnvDisabled(err); !ok {
 		return false, err
@@ -994,7 +1001,7 @@ func (c *kameleoonClient) GetVariation(
 	if err = utils.ValidateVisitorCode(visitorCode); err != nil {
 		return
 	}
-	var featureFlag types.FeatureFlag
+	var featureFlag types.IFeatureFlag
 	if featureFlag, err = c.dataManager.DataFile().GetFeatureFlag(featureKey); err != nil {
 		return
 	}
@@ -1062,7 +1069,7 @@ func (c *kameleoonClient) GetVariations(
 }
 
 func (c *kameleoonClient) getVariationInfo(
-	visitorCode string, featureFlag types.FeatureFlag, track bool,
+	visitorCode string, featureFlag types.IFeatureFlag, track bool,
 ) (variationKey string, evalExp *evaluatedExperiment, err error) {
 	logging.Debug(
 		"CALL: kameleoonClient.getVariationInfo(visitorCode: %s, featureFlag: %s, track: %s)",
@@ -1082,7 +1089,7 @@ func (c *kameleoonClient) getVariationInfo(
 }
 
 func (c *kameleoonClient) evaluate(
-	visitor storage.Visitor, visitorCode string, featureFlag types.FeatureFlag, track, save bool,
+	visitor storage.Visitor, visitorCode string, featureFlag types.IFeatureFlag, track, save bool,
 ) (evalExp *evaluatedExperiment, err error) {
 	logging.Debug(
 		"CALL: kameleoonClient.evaluate(visitor, visitorCode: %s, featureFlag: %s, track: %s, save: %s)",
@@ -1100,10 +1107,18 @@ func (c *kameleoonClient) evaluate(
 	}
 	if forcedVariation != nil {
 		evalExp = newEvaluatedExperimentFromForcedVariation(forcedVariation)
-	} else if c.isVisitorNotInHoldout(visitor, visitorCode, track, save, featureFlag.GetBucketingCustomDataIndex()) &&
-		c.isFFUnrestrictedByMEGroup(visitor, visitorCode, featureFlag) {
-		if evalExp, err = c.calculateVariationRuleForFeature(visitorCode, featureFlag); err != nil {
+	} else {
+		var isVisitorNotInHoldout bool
+		isVisitorNotInHoldout, err = c.isVisitorNotInHoldout(
+			visitor, visitorCode, track, save, featureFlag.GetBucketingCustomDataIndex(),
+		)
+		if err != nil {
 			return
+		}
+		if isVisitorNotInHoldout && c.isFFUnrestrictedByMEGroup(visitor, visitorCode, featureFlag) {
+			if evalExp, err = c.calculateVariationRuleForFeature(visitorCode, featureFlag); err != nil {
+				return
+			}
 		}
 	}
 	if save && ((forcedVariation == nil) || !forcedVariation.Simulated()) {
@@ -1113,7 +1128,7 @@ func (c *kameleoonClient) evaluate(
 }
 
 func (c *kameleoonClient) isFFUnrestrictedByMEGroup(
-	visitor storage.Visitor, visitorCode string, featureFlag types.FeatureFlag,
+	visitor storage.Visitor, visitorCode string, featureFlag types.IFeatureFlag,
 ) bool {
 	meGroupName := featureFlag.GetMEGroupName()
 	if meGroupName == "" {
@@ -1139,17 +1154,22 @@ func (c *kameleoonClient) isFFUnrestrictedByMEGroup(
 
 func (c *kameleoonClient) isVisitorNotInHoldout(
 	visitor storage.Visitor, visitorCode string, track, save bool, bucketingCustomDataIndex *int,
-) bool {
+) (isNotInHoldout bool, err error) {
 	holdout := c.dataManager.DataFile().Holdout()
+	isNotInHoldout = true
 	if holdout == nil {
-		return true
+		return
 	}
-	const inHoldoutVariationKey = "in-holdout"
 	logging.Debug(
 		"CALL: kameleoonClient.isVisitorNotInHoldout(visitor, visitorCode: %s, track: %s, save: %s,"+
 			" bucketingCustomDataIndex: %s)", visitorCode, track, save, bucketingCustomDataIndex,
 	)
-	isNotInHoldout := true
+	consent, blockingBehaviour := c.getConsentAndBlockingBehaviour(visitor)
+	if consent == types.LegalConsentNotGiven && blockingBehaviour == types.CompletelyBlockedByConsent {
+		err = errs.NewFeatureEnvironmentDisabledWithMessage("Evaluation for a holdout is blocked because visitor's consent was not provided.")
+		return
+	}
+	const inHoldoutVariationKey = "in-holdout"
 	codeForHash := getCodeForHash(visitor, visitorCode, bucketingCustomDataIndex)
 	variationHash := utils.ObtainHash(codeForHash, holdout.ExperimentId)
 	logging.Debug("Calculated holdout hash %s for code %s", variationHash, codeForHash)
@@ -1169,7 +1189,7 @@ func (c *kameleoonClient) isVisitorNotInHoldout(
 			" bucketingCustomDataIndex: %s) -> (isNotInHoldout: %s)",
 		visitorCode, track, save, bucketingCustomDataIndex, isNotInHoldout,
 	)
-	return isNotInHoldout
+	return
 }
 
 func createExternalVariation(
@@ -1192,9 +1212,10 @@ func createExternalVariation(
 			}
 		}
 	}
-	var variationKey string
+	var variationKey, variationName string
 	if internalVariation != nil {
 		variationKey = internalVariation.Key
+		variationName = internalVariation.Name
 	}
 	var variationId *int
 	var experimentId *int
@@ -1204,6 +1225,7 @@ func createExternalVariation(
 	}
 	variation = types.Variation{
 		Key:          variationKey,
+		Name:         variationName,
 		VariationID:  variationId,
 		ExperimentID: experimentId,
 		Variables:    variables,
@@ -1548,6 +1570,48 @@ func (c *kameleoonClient) EvaluateAudiences(visitorCode string) (err error) {
 	return
 }
 
+func (c *kameleoonClient) GetDataFile() types.DataFile {
+	logging.Info("CALL: kameleoonClient.GetDataFile()")
+	internalFeatureFlags := c.dataManager.DataFile().GetFeatureFlags()
+	featureFlags := make(map[string]types.FeatureFlag, len(internalFeatureFlags))
+	for featureKey, internalFeatureFlag := range internalFeatureFlags {
+		// Collect variations
+		internalVariations := internalFeatureFlag.GetVariations()
+		variations := make(map[string]types.Variation, len(internalVariations))
+		for _, internalVariation := range internalVariations {
+			variations[internalVariation.Key] = createExternalVariation(&internalVariation, nil)
+		}
+		// Collect rules
+		internalRules := internalFeatureFlag.GetRules()
+		rules := make([]types.Rule, len(internalRules))
+		for ruleIndex, internalRule := range internalRules {
+			varsByExp := internalRule.GetRuleBase().Experiment.VariationsByExposition
+			ruleVars := make(map[string]types.Variation, len(varsByExp))
+			for _, varByExp := range varsByExp {
+				if variation, exists := variations[varByExp.VariationKey]; exists {
+					ruleVars[variation.Key] = types.Variation{
+						Key:          variation.Key,
+						Name:         variation.Name,
+						VariationID:  utils.Reref(varByExp.VariationID),
+						ExperimentID: utils.Reref(&internalRule.GetRuleBase().Experiment.ExperimentId),
+						Variables:    variation.Variables,
+					}
+				}
+			}
+			rules[ruleIndex] = types.Rule{Variations: ruleVars}
+		}
+		featureFlags[featureKey] = types.FeatureFlag{
+			Variations:           variations,
+			IsEnvironmentEnabled: internalFeatureFlag.GetEnvironmentEnabled(),
+			Rules:                rules,
+			DefaultVariationKey:  internalFeatureFlag.GetDefaultVariationKey(),
+		}
+	}
+	dataFile := types.DataFile{FeatureFlags: featureFlags}
+	logging.Info("RETURN: kameleoonClient.GetDataFile() -> (dataFile: %v)", dataFile)
+	return dataFile
+}
+
 type evaluatedExperiment struct {
 	varByExp   *types.VariationByExposition
 	experiment *types.Experiment
@@ -1555,7 +1619,7 @@ type evaluatedExperiment struct {
 }
 
 func newEvaluatedExperimentFromVarByExpRule(
-	varByExp *types.VariationByExposition, rule types.Rule,
+	varByExp *types.VariationByExposition, rule types.IRule,
 ) *evaluatedExperiment {
 	return &evaluatedExperiment{
 		varByExp:   varByExp,

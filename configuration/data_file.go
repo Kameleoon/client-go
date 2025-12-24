@@ -15,13 +15,13 @@ type DataFile struct {
 	holdout                          *types.Experiment
 	settings                         Settings
 	featureFlags                     map[string]*FeatureFlag
-	orderedFeatureFlags              []types.FeatureFlag
+	orderedFeatureFlags              []types.IFeatureFlag
 	meGroups                         map[string]types.MEGroup
 	environment                      string
 	hasAnyTDRule                     bool
 	segments                         map[int]types.Segment
 	audienceTrackingSegments         []types.Segment
-	featureFlagById                  map[int]types.FeatureFlag
+	featureFlagById                  map[int]types.IFeatureFlag
 	ruleInfoByExpId                  map[int]types.RuleInfo
 	variationById                    map[int]*types.VariationByExposition
 	experimentIdsWithJSOrCSSVariable map[int]struct{}
@@ -85,10 +85,10 @@ func collectSegmentsFromConfiguration(configuration Configuration) (map[int]type
 
 func collectFeatureFlagsFromConfiguration(
 	configuration Configuration, segments map[int]types.Segment, cdi *types.CustomDataInfo,
-) (ffs map[string]*FeatureFlag, ordered []types.FeatureFlag) {
+) (ffs map[string]*FeatureFlag, ordered []types.IFeatureFlag) {
 	n := len(configuration.FeatureFlags)
 	ffs = make(map[string]*FeatureFlag, n)
-	ordered = make([]types.FeatureFlag, n)
+	ordered = make([]types.IFeatureFlag, n)
 	for i := 0; i < n; i++ {
 		ff := &configuration.FeatureFlags[i]
 		ff.applySegments(segments)
@@ -127,7 +127,7 @@ func (df *DataFile) FeatureFlags() map[string]*FeatureFlag {
 	return df.featureFlags
 }
 
-func (df *DataFile) GetFeatureFlag(featureKey string) (types.FeatureFlag, error) {
+func (df *DataFile) GetFeatureFlag(featureKey string) (types.IFeatureFlag, error) {
 	logging.Debug("CALL: DataFile.GetFeatureFlag(featureKey: %s)", featureKey)
 	ff, contains := df.featureFlags[featureKey]
 	var err error
@@ -141,9 +141,9 @@ func (df *DataFile) GetFeatureFlag(featureKey string) (types.FeatureFlag, error)
 	return ff, err
 }
 
-func (df *DataFile) GetFeatureFlags() map[string]types.FeatureFlag {
+func (df *DataFile) GetFeatureFlags() map[string]types.IFeatureFlag {
 	logging.Debug("CALL: DataFile.GetFeatureFlags()")
-	ffs := make(map[string]types.FeatureFlag)
+	ffs := make(map[string]types.IFeatureFlag)
 	for key, ff := range df.featureFlags {
 		ffs[key] = ff
 	}
@@ -151,7 +151,7 @@ func (df *DataFile) GetFeatureFlags() map[string]types.FeatureFlag {
 	return ffs
 }
 
-func (df *DataFile) GetOrderedFeatureFlags() []types.FeatureFlag {
+func (df *DataFile) GetOrderedFeatureFlags() []types.IFeatureFlag {
 	return df.orderedFeatureFlags
 }
 
@@ -163,7 +163,7 @@ func (df *DataFile) HasAnyTargetedDeliveryRule() bool {
 	return df.hasAnyTDRule
 }
 
-func (df *DataFile) GetFeatureFlagById(featureFlagId int) types.FeatureFlag {
+func (df *DataFile) GetFeatureFlagById(featureFlagId int) types.IFeatureFlag {
 	return df.featureFlagById[featureFlagId]
 }
 
@@ -195,12 +195,12 @@ func detIfHasAnyTargetedDeliveryRule(featureFlags map[string]*FeatureFlag) bool 
 }
 
 func collectIndices(featureFlags map[string]*FeatureFlag) (
-	featureFlagById map[int]types.FeatureFlag,
+	featureFlagById map[int]types.IFeatureFlag,
 	ruleInfoByExpId map[int]types.RuleInfo,
 	variationById map[int]*types.VariationByExposition,
 	experimentIdsWithJSOrCSSVariable map[int]struct{},
 ) {
-	featureFlagById = make(map[int]types.FeatureFlag)
+	featureFlagById = make(map[int]types.IFeatureFlag)
 	ruleInfoByExpId = make(map[int]types.RuleInfo)
 	variationById = make(map[int]*types.VariationByExposition)
 	experimentIdsWithJSOrCSSVariable = make(map[int]struct{})
@@ -240,8 +240,8 @@ func hasFeatureFlagVariableJsCss(featureFlag *FeatureFlag) bool {
 	return false
 }
 
-func makeMEGroups(featureFlags []types.FeatureFlag) map[string]types.MEGroup {
-	meGroupLists := make(map[string][]types.FeatureFlag)
+func makeMEGroups(featureFlags []types.IFeatureFlag) map[string]types.MEGroup {
+	meGroupLists := make(map[string][]types.IFeatureFlag)
 	for _, ff := range featureFlags {
 		meGroupName := ff.GetMEGroupName()
 		if meGroupName != "" {

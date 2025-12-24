@@ -37,6 +37,6 @@ func (c SegmentCondition) String() string {
 }
 
 type TargetingDataSegmentCondition struct {
-	DataFile            types.DataFile
+	DataFile            types.IDataFile
 	TargetingDataGetter types.TargetingDataGetter
 }

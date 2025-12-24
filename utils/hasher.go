@@ -2,6 +2,7 @@ package utils
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"math"
 	"strconv"
 )
@@ -25,20 +26,13 @@ func ObtainHash(visitorCode string, containerID int, suffix ...string) float64 {
 }
 
 func ObtainHashForMEGroup(visitorCode string, meGroupName string) float64 {
-	return CalculateHash([]byte(visitorCode + meGroupName))
+	b := make([]byte, 0, len(visitorCode)+len(meGroupName))
+	b = append(b, visitorCode...)
+	b = append(b, meGroupName...)
+	return CalculateHash(b)
 }
 
 func CalculateHash(b []byte) float64 {
-	h := sha256.New()
-	h.Write(b)
-	b = h.Sum(nil)
-	parsedValue := uint64(b[7]) |
-		(uint64(b[6]) << 8) |
-		(uint64(b[5]) << 16) |
-		(uint64(b[4]) << 24) |
-		(uint64(b[3]) << 32) |
-		(uint64(b[2]) << 40) |
-		(uint64(b[1]) << 48) |
-		(uint64(b[0]) << 56)
-	return float64(parsedValue) / math.MaxUint64
+	sum := sha256.Sum256(b)
+	return float64(binary.BigEndian.Uint64(sum[:8])) / math.MaxUint64
 }

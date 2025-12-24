@@ -8,6 +8,7 @@ const (
 
 type VariationFeatureFlag struct {
 	Key       string     `json:"key"`
+	Name      string     `json:"name"`
 	Variables []Variable `json:"variables"`
 }
 

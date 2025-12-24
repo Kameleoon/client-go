@@ -5,16 +5,16 @@ import "fmt"
 // Base
 
 type ForcedVariation interface {
-	Rule() Rule
+	Rule() IRule
 	VarByExp() *VariationByExposition
 }
 
 type forcedVariation struct {
-	rule     Rule
+	rule     IRule
 	varByExp *VariationByExposition
 }
 
-func (fv *forcedVariation) Rule() Rule {
+func (fv *forcedVariation) Rule() IRule {
 	return fv.rule
 }
 
@@ -31,7 +31,7 @@ type ForcedFeatureVariation struct {
 }
 
 func NewForcedFeatureVariation(
-	featureKey string, rule Rule, varByExp *VariationByExposition, simulated bool,
+	featureKey string, rule IRule, varByExp *VariationByExposition, simulated bool,
 ) *ForcedFeatureVariation {
 	return &ForcedFeatureVariation{
 		forcedVariation: forcedVariation{rule: rule, varByExp: varByExp},
@@ -67,7 +67,7 @@ type ForcedExperimentVariation struct {
 }
 
 func NewForcedExperimentVariation(
-	rule Rule, varByExp *VariationByExposition, forceTargeting bool,
+	rule IRule, varByExp *VariationByExposition, forceTargeting bool,
 ) *ForcedExperimentVariation {
 	return &ForcedExperimentVariation{
 		forcedVariation: forcedVariation{rule: rule, varByExp: varByExp},

@@ -149,16 +149,16 @@ func (rvd *remoteVisitorData) UnmarshalJSON(data []byte) error {
 
 func (rvd *remoteVisitorData) parseCurrentVisit(m *remoteVisitorDataModel) {
 	if m.CurrentVisit != nil {
-		rvd.parseVisit(m.CurrentVisit, false)
+		rvd.parseVisit(m.CurrentVisit, 0)
 	}
 }
 
 func (rvd *remoteVisitorData) parsePreviousVisits(m *remoteVisitorDataModel) {
 	prevVisits := make([]types.Visit, 0, len(m.PreviousVisits))
-	for _, prevVisit := range m.PreviousVisits {
+	for i, prevVisit := range m.PreviousVisits {
 		if prevVisit != nil {
 			prevVisits = append(prevVisits, types.NewVisit(prevVisit.TimeStarted, prevVisit.TimeLastEvent))
-			rvd.parseVisit(prevVisit, true)
+			rvd.parseVisit(prevVisit, i+1)
 		}
 	}
 	if len(prevVisits) > 0 {
@@ -168,7 +168,7 @@ func (rvd *remoteVisitorData) parsePreviousVisits(m *remoteVisitorDataModel) {
 	}
 }
 
-func (rvd *remoteVisitorData) parseVisit(v *visitModel /*non-nil*/, isPrevVisit bool) {
+func (rvd *remoteVisitorData) parseVisit(v *visitModel /*non-nil*/, visitOffset int) {
 	if rvd.visitorCode == "" {
 		rvd.visitorCode = v.VisitorCode
 	}
@@ -178,7 +178,7 @@ func (rvd *remoteVisitorData) parseVisit(v *visitModel /*non-nil*/, isPrevVisit 
 	rvd.parsePersonalizations(v.PersonalizationEvents)
 	rvd.parseConversions(v.ConversionEvents)
 	rvd.parseGeolocation(v.GeolocationEvents)
-	rvd.parseStaticData(v.StaticDataEvent, isPrevVisit)
+	rvd.parseStaticData(v.StaticDataEvent, visitOffset)
 }
 
 func (rvd *remoteVisitorData) parseCustomData(customDataEvents []*dataEventModel[customDataModel]) {
@@ -269,15 +269,12 @@ func (rvd *remoteVisitorData) parseGeolocation(geolocationEvents []*dataEventMod
 	rvd.geolocation = types.NewGeolocation(event.Data.Country, event.Data.Region, event.Data.City)
 }
 
-func (rvd *remoteVisitorData) parseStaticData(staticDataEvent *dataEventModel[staticDataModel], isPrevVisit bool) {
+func (rvd *remoteVisitorData) parseStaticData(staticDataEvent *dataEventModel[staticDataModel], visitOffset int) {
 	if (staticDataEvent == nil) || (staticDataEvent.Data == nil) {
 		return
 	}
-	if rvd.visitNumber == 0 {
-		rvd.visitNumber = staticDataEvent.Data.VisitNumber
-		if isPrevVisit && (rvd.visitNumber > 0) {
-			rvd.visitNumber++
-		}
+	if (rvd.visitNumber == 0) && (staticDataEvent.Data.VisitNumber != nil) {
+		rvd.visitNumber = *staticDataEvent.Data.VisitNumber + visitOffset
 	}
 	if rvd.filter.Device && (rvd.device == nil) {
 		rvd.device = types.NewDevice(types.DeviceType(staticDataEvent.Data.DeviceType))
@@ -376,7 +373,7 @@ type geolocationDataModel struct {
 }
 
 type staticDataModel struct {
-	VisitNumber    int     `json:"visitNumber"`
+	VisitNumber    *int    `json:"visitNumber,omitempty"`
 	DeviceType     string  `json:"deviceType"`
 	Browser        string  `json:"browser"`
 	BrowserVersion float32 `json:"browserVersion"`

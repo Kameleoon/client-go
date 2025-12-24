@@ -50,7 +50,7 @@ func (c *TargetFeatureFlagCondition) CheckTargeting(targetData interface{}) bool
 	return false
 }
 
-func (c *TargetFeatureFlagCondition) getRules(dataFile types.DataFile) []types.Rule {
+func (c *TargetFeatureFlagCondition) getRules(dataFile types.IDataFile) []types.IRule {
 	ff := dataFile.GetFeatureFlagById(c.FeatureFlagId)
 	if ff == nil {
 		return nil
@@ -59,7 +59,7 @@ func (c *TargetFeatureFlagCondition) getRules(dataFile types.DataFile) []types.R
 	if c.ConditionRuleId > 0 {
 		for _, rule := range rules {
 			if (rule.GetRuleBase() != nil) && (rule.GetRuleBase().Id == c.ConditionRuleId) {
-				return []types.Rule{rule}
+				return []types.IRule{rule}
 			}
 		}
 		return nil
@@ -73,6 +73,6 @@ func (c TargetFeatureFlagCondition) String() string {
 }
 
 type TargetingDataTargetFeatureFlagCondition struct {
-	DataFile         types.DataFile
+	DataFile         types.IDataFile
 	VariationStorage storage.DataMapStorage[int, *types.AssignedVariation]
 }

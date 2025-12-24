@@ -13,7 +13,7 @@ type TrackingBuilder struct {
 	built bool
 
 	visitorCodes     VisitorCodeCollection
-	dataFile         types.DataFile
+	dataFile         types.IDataFile
 	visitorManager   storage.VisitorManager
 	requestSizeLimit int
 	totalSize        int
@@ -26,7 +26,7 @@ type TrackingBuilder struct {
 }
 
 func NewTrackingBuilder(
-	visitorCodes VisitorCodeCollection, dataFile types.DataFile, visitorManager storage.VisitorManager,
+	visitorCodes VisitorCodeCollection, dataFile types.IDataFile, visitorManager storage.VisitorManager,
 	requestSizeLimit int,
 ) *TrackingBuilder {
 	return &TrackingBuilder{
