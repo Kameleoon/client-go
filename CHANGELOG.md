@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 3.18.0 - 2026-02-13
+### Features
+* Updated the allowed range for the [`trackingInterval`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#additional-configuration). The new range is from **`1000` ms** (default) to **`5000` ms**, allowing a reduction in the number of tracking requests.
+* Introduced a new `track` parameter for [`addData`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#adddata). When set to `false`, the data is stored locally and used only for targeting evaluation; it is not sent to the Data API, helping to prevent duplicate data from being recorded. The default value is `true`. This behavior is consistent with the `track` parameter used in evaluation methods such as [`getVariation`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#getvariation).
+* Introduced support for the Kameleoon [`ApplicationVersion`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk/#applicationversion) data type, allowing the visitor’s application version to be set and used in targeting evaluation.
+
 ## 3.17.0 - 2025-12-24
 ### Features
 * Introduced a new [`GetDataFile`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getdatafile) method. This method returns the current SDK configuration (also known as the **data file**) used for evaluation and targeting. It is **not** intended for production use to fetch variations for every feature flag in the returned list, as it is not optimized for performance. For that purpose, use [`GetVariations`](https://developers.kameleoon.com/feature-management-and-experimentation/web-sdks/go-sdk#getvariations) instead. `GetDataFile` is mainly useful for debugging or QA, for example to let internal users manually select a variant for a specific feature flag in production.

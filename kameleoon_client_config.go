@@ -20,8 +20,8 @@ const (
 	DefaultTopLevelDomain   = ""
 	DefaultNetworkDomain    = ""
 	DefaultTrackingInterval = time.Second
-	MinTrackingInterval     = time.Millisecond * 100
-	MaxTrackingInterval     = time.Second
+	MinTrackingInterval     = time.Second
+	MaxTrackingInterval     = 5 * time.Second
 )
 
 // Field Logger is DEPRECATED. Please use `logging.SetLogger(logging.Logger)` instead.

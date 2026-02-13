@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Kameleoon/client-go/v3/logging"
 	"github.com/Kameleoon/client-go/v3/targeting/conditions"
 	"github.com/Kameleoon/client-go/v3/types"
 )
@@ -179,6 +180,8 @@ func getCondition(c types.TargetingCondition) types.Condition {
 		return conditions.NewVisitorCodeCondition(c)
 	case types.TargetingSDKLanguage:
 		return conditions.NewSdkLanguageCondition(c)
+	case types.TargetingApplicationVersion:
+		return conditions.NewVersionCondition(c)
 	case types.TargetingPageTitle:
 		return conditions.NewPageTitleCondition(c)
 	case types.TargetingPageUrl:
@@ -218,5 +221,6 @@ func getCondition(c types.TargetingCondition) types.Condition {
 	case types.TargetingHeatSlice:
 		return conditions.NewKcsHeatRangeCondition(c)
 	}
+	logging.Info("Unexpected targeting condition type '%s'", c.GetType())
 	return nil
 }

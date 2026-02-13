@@ -14,6 +14,7 @@ type DataType string
 
 const (
 	DataTypeAssignedVariation         DataType = "EXPERIMENT"
+	DataTypeApplicationVersion        DataType = "APPLICATION_VERSION"
 	DataTypeForcedExperimentVariation DataType = "FORCED_EXPERIMENT_VARIATION"
 	DataTypeForcedFeatureVariation    DataType = "FORCED_FEATURE_VARIATION"
 	DataTypeCustom                    DataType = "CUSTOM"

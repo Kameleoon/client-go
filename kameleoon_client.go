@@ -72,6 +72,19 @@ func (p GetVariationsOptParams) Track(value bool) GetVariationsOptParams {
 	return p
 }
 
+type AddDataOptParams struct {
+	track bool
+}
+
+func NewAddDataOptParams() AddDataOptParams {
+	return AddDataOptParams{track: true}
+}
+
+func (p AddDataOptParams) Track(value bool) AddDataOptParams {
+	p.track = value
+	return p
+}
+
 type TrackConversionOptParams struct {
 	Revenue  float64
 	Negative bool
@@ -109,13 +122,24 @@ type KameleoonClient interface {
 
 	SetLegalConsent(visitorCode string, consent bool, response ...*fasthttp.Response) error
 
-	// AddData associate various Data to a visitor.
+	// AddData associates various Data with a visitor
 	//
 	// Note that this method doesn't return any value and doesn't interact with the
-	// Kameleoon back-end servers by itself. Instead, the declared data is saved for future sending via the flush method.
-	// This reduces the number of server calls made, as data is usually grouped into a single server call triggered by
-	// the execution of the flush method.
+	// Kameleoon back-end servers by itself. Instead, the declared data is saved for
+	// future sending via the Flush method. This reduces the number of server calls made,
+	// as data is usually grouped into a single server call triggered by the execution
+	// of the Flush method.
 	AddData(visitorCode string, allData ...types.Data) error
+
+	// AddDataWithOptParams associates various Data with a visitor, allowing additional
+	// optional parameters to control how the data is handled.
+	//
+	// Note that this method doesn't return any value and doesn't interact with the
+	// Kameleoon back-end servers by itself. Instead, the declared data is saved for
+	// future sending via the Flush method. This reduces the number of server calls made,
+	// as data is usually grouped into a single server call triggered by the execution
+	// of the Flush method.
+	AddDataWithOptParams(visitorCode string, optParams AddDataOptParams, allData ...types.Data) error
 
 	// TrackConversion on a particular goal
 	//
@@ -470,15 +494,18 @@ func (c *kameleoonClient) SetLegalConsent(visitorCode string, consent bool, resp
 }
 
 func (c *kameleoonClient) AddData(visitorCode string, allData ...types.Data) error {
-	//var stats runtime.MemStats
-	//runtime.ReadMemStats(&stats))
-	logging.Info("CALL: kameleoonClient.AddData(visitorCode: %s, allData: %s)", visitorCode, allData)
+	return c.AddDataWithOptParams(visitorCode, NewAddDataOptParams(), allData...)
+}
+
+func (c *kameleoonClient) AddDataWithOptParams(visitorCode string, optParams AddDataOptParams, allData ...types.Data) error {
+	logging.Info("CALL: kameleoonClient.AddDataWithOptParams(visitorCode: %s, track: %t, allData: %s)",
+		visitorCode, optParams.track, allData)
 	err := utils.ValidateVisitorCode(visitorCode)
 	if err == nil {
-		c.visitorManager.AddData(visitorCode, allData...)
+		c.visitorManager.AddDataWithTrack(visitorCode, optParams.track, allData...)
 	}
-	logging.Info("RETURN: kameleoonClient.AddData(visitorCode: %s, allData: %s) -> (error: %s)",
-		visitorCode, allData, err)
+	logging.Info("RETURN: kameleoonClient.AddDataWithOptParams(visitorCode: %s, track: %t, allData: %s) -> (error: %s)",
+		visitorCode, optParams.track, allData, err)
 	return err
 }
 

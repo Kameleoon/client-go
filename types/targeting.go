@@ -63,6 +63,7 @@ const (
 	TargetingTargetPersonalization  TargetingType = "TARGET_PERSONALIZATION"
 	TargetingExclusiveExperiment    TargetingType = "EXCLUSIVE_EXPERIMENT"
 	TargetingSDKLanguage            TargetingType = "SDK_LANGUAGE"
+	TargetingApplicationVersion     TargetingType = "APPLICATION_VERSION"
 	TargetingVisitorCode            TargetingType = "VISITOR_CODE"
 	TargetingSegment                TargetingType = "SEGMENT"
 )

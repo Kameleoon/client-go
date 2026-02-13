@@ -25,6 +25,7 @@ type Visitor interface {
 
 	UserAgent() string
 	Device() *types.Device
+	ApplicationVersion() *types.ApplicationVersion
 	Browser() *types.Browser
 	Cookie() *types.Cookie
 	OperatingSystem() *types.OperatingSystem
@@ -131,6 +132,12 @@ func (v *VisitorImpl) Device() *types.Device {
 	d := v.data.device
 	logging.Debug("CALL/RETURN: VisitorImpl.Device() -> (device: %s)", d)
 	return d
+}
+
+func (v *VisitorImpl) ApplicationVersion() *types.ApplicationVersion {
+	av := v.data.applicationVersion
+	logging.Debug("CALL/RETURN: VisitorImpl.ApplicationVersion() -> (applicationVersion: %s)", av)
+	return av
 }
 
 func (v *VisitorImpl) Browser() *types.Browser {
@@ -294,23 +301,25 @@ func (v *VisitorImpl) addData(overwrite bool, data types.BaseData) {
 	dataType := data.DataType()
 	switch dataType {
 	case types.DataTypeUserAgent:
-		v.data.addUserAgent(data)
+		v.data.setUserAgent(data)
 	case types.DataTypeDevice:
-		v.data.addDevice(data, overwrite)
+		v.data.setDevice(data, overwrite)
 	case types.DataTypeBrowser:
-		v.data.addBrowser(data, overwrite)
+		v.data.setBrowser(data, overwrite)
 	case types.DataTypeCookie:
-		v.data.addCookie(data)
+		v.data.setCookie(data)
 	case types.DataTypeOperatingSystem:
-		v.data.addOperatingSystem(data, overwrite)
+		v.data.setOperatingSystem(data, overwrite)
 	case types.DataTypeGeolocation:
-		v.data.addGeolocation(data, overwrite)
+		v.data.setGeolocation(data, overwrite)
 	case types.DataTypeKcsHeat:
-		v.data.addKcsHeat(data)
+		v.data.setKcsHeat(data)
+	case types.DataTypeApplicationVersion:
+		v.data.setApplicationVersion(data, overwrite)
 	case types.DataTypeCBScores:
-		v.data.addCBScores(data, overwrite)
+		v.data.setCBScores(data, overwrite)
 	case types.DataTypeVisitorVisits:
-		v.data.addVisitorVisits(data, overwrite)
+		v.data.setVisitorVisits(data, overwrite)
 	case types.DataTypeCustom:
 		v.data.addCustomData(data, overwrite)
 	case types.DataTypePageView:
@@ -361,6 +370,7 @@ type visitorData struct {
 	userAgent           string
 	legalConsent        types.LegalConsent
 	device              *types.Device
+	applicationVersion  *types.ApplicationVersion
 	browser             *types.Browser
 	cookie              *types.Cookie
 	operatingSystem     *types.OperatingSystem
@@ -450,49 +460,54 @@ func (vd *visitorData) countSendableData() int {
 	return count
 }
 
-func (vd *visitorData) addUserAgent(data types.BaseData) {
+func (vd *visitorData) setUserAgent(data types.BaseData) {
 	if ua, ok := data.(types.UserAgent); ok {
 		vd.userAgent = ua.Value()
 	}
 }
-func (vd *visitorData) addDevice(data types.BaseData, overwrite bool) {
+func (vd *visitorData) setDevice(data types.BaseData, overwrite bool) {
 	if d, ok := data.(*types.Device); ok && (overwrite || (vd.device == nil)) {
 		vd.device = d
 	}
 }
-func (vd *visitorData) addBrowser(data types.BaseData, overwrite bool) {
+func (vd *visitorData) setBrowser(data types.BaseData, overwrite bool) {
 	if b, ok := data.(*types.Browser); ok && (overwrite || (vd.browser == nil)) {
 		vd.browser = b
 	}
 }
-func (vd *visitorData) addCookie(data types.BaseData) {
+func (vd *visitorData) setCookie(data types.BaseData) {
 	if c, ok := data.(*types.Cookie); ok {
 		vd.cookie = c
 	}
 }
-func (vd *visitorData) addOperatingSystem(data types.BaseData, overwrite bool) {
+func (vd *visitorData) setOperatingSystem(data types.BaseData, overwrite bool) {
 	if os, ok := data.(*types.OperatingSystem); ok && (overwrite || (vd.operatingSystem == nil)) {
 		vd.operatingSystem = os
 	}
 }
-func (vd *visitorData) addGeolocation(data types.BaseData, overwrite bool) {
+func (vd *visitorData) setGeolocation(data types.BaseData, overwrite bool) {
 	if g, ok := data.(*types.Geolocation); ok && (overwrite || (vd.geolocation == nil)) {
 		vd.geolocation = g
 	}
 }
-func (vd *visitorData) addKcsHeat(data types.BaseData) {
+func (vd *visitorData) setKcsHeat(data types.BaseData) {
 	if kh, ok := data.(*types.KcsHeat); ok {
 		vd.kcsHeat = kh
 	}
 }
-func (vd *visitorData) addCBScores(data types.BaseData, overwrite bool) {
+func (vd *visitorData) setCBScores(data types.BaseData, overwrite bool) {
 	if cbs, ok := data.(*types.CBScores); ok && (overwrite || (vd.cbscores == nil)) {
 		vd.cbscores = cbs
 	}
 }
-func (vd *visitorData) addVisitorVisits(data types.BaseData, overwrite bool) {
+func (vd *visitorData) setVisitorVisits(data types.BaseData, overwrite bool) {
 	if vv, ok := data.(*types.VisitorVisits); ok && (overwrite || (vd.visitorVisits == nil)) {
 		vd.visitorVisits = vv.Localize(vd.timeStarted.UnixMilli())
+	}
+}
+func (vd *visitorData) setApplicationVersion(data types.BaseData, overwrite bool) {
+	if av, ok := data.(*types.ApplicationVersion); ok && (overwrite || (vd.applicationVersion == nil)) {
+		vd.applicationVersion = av
 	}
 }
 func (vd *visitorData) addCustomData(data types.BaseData, overwrite bool) {

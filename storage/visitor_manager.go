@@ -14,6 +14,7 @@ type VisitorManager interface {
 	GetOrCreateVisitor(visitorCode string) Visitor
 
 	AddData(visitorCode string, data ...types.Data) Visitor
+	AddDataWithTrack(visitorCode string, track bool, data ...types.Data) Visitor
 
 	Enumerate(f func(string, Visitor) bool)
 	Len() int
@@ -108,7 +109,11 @@ func (vm *VisitorManagerImpl) getOrCreateVisitor(visitorCode string) *VisitorImp
 }
 
 func (vm *VisitorManagerImpl) AddData(visitorCode string, data ...types.Data) Visitor {
-	logging.Debug("CALL: VisitorManagerImpl.AddData(visitorCode: %s, data: %s)", visitorCode, data)
+	return vm.AddDataWithTrack(visitorCode, true, data...)
+}
+
+func (vm *VisitorManagerImpl) AddDataWithTrack(visitorCode string, track bool, data ...types.Data) Visitor {
+	logging.Debug("CALL: VisitorManagerImpl.AddDataWithTrack(visitorCode: %s, track: %t, data: %s)", visitorCode, track, data)
 	visitor := vm.getOrCreateVisitor(visitorCode)
 	cdi := vm.dataManager.DataFile().CustomDataInfo()
 	if cdi != nil {
@@ -119,10 +124,15 @@ func (vm *VisitorManagerImpl) AddData(visitorCode string, data ...types.Data) Vi
 			case *types.Conversion:
 				data[i] = vm.processConversion(dataImpl, cdi)
 			}
+			if !track {
+				if sendable, ok := data[i].(types.Sendable); ok {
+					sendable.MarkAsSent()
+				}
+			}
 		}
 	}
 	visitor.AddData(data...)
-	logging.Debug("RETURN: VisitorManagerImpl.AddData(visitorCode: %s, data: %s) -> (visitor)", visitorCode, data)
+	logging.Debug("RETURN: VisitorManagerImpl.AddDataWithTrack(visitorCode: %s, track: %t, data: %s) -> (visitor)", visitorCode, track, data)
 	return visitor
 }
 

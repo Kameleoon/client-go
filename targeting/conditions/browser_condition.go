@@ -40,19 +40,23 @@ func (c *BrowserCondition) checkTargeting(browser *types.Browser) bool {
 		return true
 	}
 	// check the version because it's defined in condition
-	versionNumber, err := GetMajorMinorAsFloat(c.Version)
+	version, err := utils.NewVersionFromString(c.Version)
 	if err != nil {
 		logging.Error("Failed to parse version %s for 'Browser' condition: %s", c.Version, err)
+		return false
+	}
+	floatVersion, err := version.ToFloat()
+	if err != nil {
 		return false
 	}
 
 	switch c.VersionMatchType {
 	case types.OperatorEqual:
-		return browser.Version() == versionNumber
+		return browser.Version() == floatVersion
 	case types.OperatorGreater:
-		return browser.Version() > versionNumber
+		return browser.Version() > floatVersion
 	case types.OperatorLower:
-		return browser.Version() < versionNumber
+		return browser.Version() < floatVersion
 	default:
 		logging.Error("Unexpected comparing operation for 'Browser' condition: %s", c.VersionMatchType)
 		return false

@@ -70,6 +70,10 @@ func (tm *targetingManager) getConditionData(
 		if visitor != nil {
 			conditionData = visitor.Device()
 		}
+	case types.TargetingApplicationVersion:
+		if visitor != nil {
+			conditionData = visitor.ApplicationVersion()
+		}
 	case types.TargetingPageTitle:
 		fallthrough
 	case types.TargetingPageUrl:
